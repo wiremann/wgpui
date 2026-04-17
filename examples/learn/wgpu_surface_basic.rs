@@ -5,8 +5,6 @@ use gpui::{
     wgpu_surface, WgpuSurfaceHandle,
 };
 use std::sync::Arc;
-use std::thread;
-use std::time::Duration;
 use wgpu::util::DeviceExt;
 
 const SHADER: &str = r#"
@@ -290,29 +288,55 @@ impl CubeRenderState {
     }
 }
 
+/// State for the spinning-cube example.
+///
+/// The cube is rendered directly inside `Render::render()` on the GPUI main thread.
+/// This guarantees that the wgpu GPU commands for the cube are submitted *before*
+/// the compositor's commands in the same frame, so the DX12 resource barriers
+/// wgpu generates are always in the correct order — no cross-thread sync needed.
 struct SurfaceExample {
     surface: WgpuSurfaceHandle,
-    fps_rx: std::sync::mpsc::Receiver<f64>,
+    /// Lazily initialised once the surface has been laid out and sized.
+    state: Option<CubeRenderState>,
+    frame_count: u32,
+    last_fps_update: std::time::Instant,
     display_fps: f64,
-    render_thread: Option<thread::JoinHandle<()>>,
-}
-
-impl Drop for SurfaceExample {
-    fn drop(&mut self) {
-        if let Some(handle) = self.render_thread.take() {
-            let _ = handle.join();
-        }
-    }
 }
 
 impl Render for SurfaceExample {
-    fn render(&mut self, window: &mut Window, _cx: &mut Context<Self>) -> impl IntoElement {
-        while let Ok(fps) = self.fps_rx.try_recv() {
-            self.display_fps = fps;
+    fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        // Render the cube into the back buffer this frame.
+        if let Some((view, (w, h))) = self.surface.back_view_with_size() {
+            let state = self.state.get_or_insert_with(|| {
+                let device = Arc::new(self.surface.device().clone());
+                let queue = Arc::new(self.surface.queue().clone());
+                let format = self.surface.format();
+                CubeRenderState::new(device, queue, w, h, format)
+            });
+
+            if state.width != w || state.height != h {
+                state.resize(w, h);
+            }
+
+            state.render(&view);
+            drop(view);
+
+            // Swap rendering→ready. The compositor (running right after this
+            // method returns) calls swap_ready_display() and samples the texture
+            // we just rendered into, within the same GPU submission sequence.
+            self.surface.swap_buffers();
+
+            self.frame_count = self.frame_count.wrapping_add(1);
+            let now = std::time::Instant::now();
+            if now.duration_since(self.last_fps_update) >= std::time::Duration::from_secs(1) {
+                self.display_fps = self.frame_count as f64;
+                self.frame_count = 0;
+                self.last_fps_update = now;
+            }
         }
-        // Keep the GPUI compositor running so it continuously picks up new
-        // triple-buffer frames from the render thread.
-        window.request_animation_frame();
+
+        // Mark the entity dirty so GPUI keeps scheduling redraws at vsync rate.
+        cx.notify();
 
         div()
             .w(gpui::px(800.0))
@@ -337,68 +361,13 @@ fn main() {
             let surface = window
                 .create_wgpu_surface(800, 600, wgpu::TextureFormat::Rgba8UnormSrgb)
                 .expect("WgpuSurface not supported on this platform");
-            let surface_thread = surface.clone();
-            let (fps_tx, fps_rx) = std::sync::mpsc::channel::<f64>();
-
-            let render_thread = thread::spawn(move || {
-                loop {
-                    if surface_thread.back_buffer_view().is_some() {
-                        break;
-                    }
-                    thread::sleep(Duration::from_millis(10));
-                }
-
-                let device = Arc::new(surface_thread.device().clone());
-                let queue = Arc::new(surface_thread.queue().clone());
-                let (width, height) = surface_thread.size();
-                let format = surface_thread.format();
-
-                let mut state = CubeRenderState::new(device, queue, width, height, format);
-
-                let mut last_report = std::time::Instant::now();
-                let mut frame_count: u32 = 0;
-                let target_frame_time = Duration::from_nanos(16_666_667); // ~60 fps
-
-                loop {
-                    let frame_start = std::time::Instant::now();
-
-                    let (view, (dw, dh)) = match surface_thread.back_view_with_size() {
-                        Some(tuple) => tuple,
-                        None => break,
-                    };
-
-                    if state.width != dw || state.height != dh {
-                        state.resize(dw, dh);
-                    }
-
-                    state.render(&view);
-                    drop(view);
-
-                    // Silently swap rendering→ready without triggering the fast-blit path.
-                    // The GPUI compositor (driven by request_animation_frame) will pick
-                    // up the ready buffer during its next full draw.
-                    surface_thread.swap_buffers();
-
-                    frame_count = frame_count.wrapping_add(1);
-                    let now = std::time::Instant::now();
-                    if now.duration_since(last_report) >= Duration::from_secs(1) {
-                        let _ = fps_tx.send(frame_count as f64);
-                        frame_count = 0;
-                        last_report = now;
-                    }
-
-                    let elapsed = frame_start.elapsed();
-                    if elapsed < target_frame_time {
-                        thread::sleep(target_frame_time - elapsed);
-                    }
-                }
-            });
 
             cx.new(|_cx| SurfaceExample {
                 surface,
-                fps_rx,
+                state: None,
+                frame_count: 0,
+                last_fps_update: std::time::Instant::now(),
                 display_fps: 0.0,
-                render_thread: Some(render_thread),
             })
         });
     });
