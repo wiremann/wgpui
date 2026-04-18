@@ -1,4 +1,5 @@
 use std::sync::{Arc, Mutex};
+use std::sync::atomic::{AtomicBool, Ordering};
 
 use refineable::Refineable as _;
 
@@ -21,6 +22,8 @@ struct WgpuSurfaceHandleInner {
     /// event bus.
     winit_window: Option<Arc<winit::window::Window>>,
     size: Mutex<(u32, u32)>,
+    pending_resize: Mutex<Option<(u32, u32)>>,
+    is_resizing: AtomicBool,
     format: wgpu::TextureFormat,
 }
 
@@ -71,6 +74,8 @@ impl WgpuSurfaceHandle {
                 present_trigger,
                 winit_window,
                 size: Mutex::new((width, height)),
+                pending_resize: Mutex::new(None),
+                is_resizing: AtomicBool::new(false),
                 format,
             }),
         }
@@ -211,6 +216,67 @@ impl WgpuSurfaceHandle {
             .resize(&self.inner.device, self.inner.surface_id, width, height);
         *size = (width, height);
     }
+
+    /// Schedule the surface resize in a background thread.
+    ///
+    /// The current surface contents remain available while the new textures are
+    /// allocated, preventing UI stalls during panel resize.
+    pub fn request_resize(&self, width: u32, height: u32) {
+        let current_size = self.size();
+        if current_size == (width, height) {
+            return;
+        }
+
+        {
+            let mut pending = self.inner.pending_resize.lock().unwrap();
+            if pending.map_or(false, |pending_size| pending_size == (width, height)) {
+                return;
+            }
+            *pending = Some((width, height));
+        }
+
+        if self
+            .inner
+            .is_resizing
+            .compare_exchange(false, true, Ordering::AcqRel, Ordering::Acquire)
+            .is_ok()
+        {
+            let inner = self.inner.clone();
+            std::thread::spawn(move || {
+                let registry = inner.registry.clone();
+                let device = inner.device.clone();
+                let surface_id = inner.surface_id;
+
+                loop {
+                    let target = {
+                        let mut pending = inner.pending_resize.lock().unwrap();
+                        pending.take()
+                    };
+
+                    let (width, height) = match target {
+                        Some(size) => size,
+                        None => {
+                            inner.is_resizing.store(false, Ordering::Release);
+                            if inner.pending_resize.lock().unwrap().is_some() {
+                                // A new resize request arrived after we last checked.
+                                if inner.is_resizing.compare_exchange(false, true, Ordering::AcqRel, Ordering::Acquire).is_ok() {
+                                    continue;
+                                }
+                            }
+                            break;
+                        }
+                    };
+
+                    while !registry.resize(&device, surface_id, width, height) {
+                        std::thread::sleep(std::time::Duration::from_millis(8));
+                    }
+
+                    let mut size = inner.size.lock().unwrap();
+                    *size = (width, height);
+                }
+            });
+        }
+    }
 }
 
 /// Create a `WgpuSurface` element from an existing handle.
@@ -290,7 +356,7 @@ impl Element for WgpuSurface {
 
         let (cur_w, cur_h) = self.handle.size();
         if pixel_w != cur_w || pixel_h != cur_h {
-            self.handle.resize(pixel_w, pixel_h);
+            self.handle.request_resize(pixel_w, pixel_h);
             if let Some(cb) = &self.on_resize {
                 cb(pixel_w, pixel_h, &self.handle);
             }
