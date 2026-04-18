@@ -285,6 +285,10 @@ impl WgpuSurfaceHandle {
             });
         }
     }
+
+    pub fn is_resize_pending(&self) -> bool {
+        self.inner.is_resizing.load(Ordering::Acquire)
+    }
 }
 
 /// Create a `WgpuSurface` element from an existing handle.
@@ -294,6 +298,7 @@ pub fn wgpu_surface(handle: WgpuSurfaceHandle) -> WgpuSurface {
         style: StyleRefinement::default(),
         on_resize: None,
         pending_resize: Mutex::new(None),
+        defer_resize_until_mouse_up: false,
     }
 }
 
@@ -310,6 +315,7 @@ pub struct WgpuSurface {
     style: StyleRefinement,
     on_resize: Option<Box<dyn Fn(u32, u32, &WgpuSurfaceHandle) + 'static>>,
     pending_resize: Mutex<Option<(u32, u32)>>,
+    defer_resize_until_mouse_up: bool,
 }
 
 impl WgpuSurface {
@@ -321,6 +327,12 @@ impl WgpuSurface {
         callback: impl Fn(u32, u32, &WgpuSurfaceHandle) + 'static,
     ) -> Self {
         self.on_resize = Some(Box::new(callback));
+        self
+    }
+
+    /// Enable deferred resize until left mouse release.
+    pub fn defer_resize_until_mouse_up(mut self, enabled: bool) -> Self {
+        self.defer_resize_until_mouse_up = enabled;
         self
     }
 }
@@ -368,7 +380,7 @@ impl Element for WgpuSurface {
         let left_pressed = window.pressed_mouse_button() == Some(MouseButton::Left);
 
         if pixel_w != cur_w || pixel_h != cur_h {
-            if left_pressed {
+            if self.defer_resize_until_mouse_up && left_pressed {
                 let mut pending = self.pending_resize.lock().unwrap();
                 *pending = Some((pixel_w, pixel_h));
             } else {
@@ -379,7 +391,7 @@ impl Element for WgpuSurface {
             }
         }
 
-        if !left_pressed {
+        if self.defer_resize_until_mouse_up && !left_pressed {
             if let Some((pending_w, pending_h)) = self.pending_resize.lock().unwrap().take() {
                 if (pending_w, pending_h) != (cur_w, cur_h) {
                     self.handle.request_resize(pending_w, pending_h);
