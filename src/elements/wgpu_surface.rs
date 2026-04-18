@@ -408,7 +408,7 @@ impl Element for WgpuSurface {
             }
         }
 
-        if self.defer_resize_until_mouse_up && !left_pressed && !window_resizing {
+        if self.defer_resize_until_mouse_up && !window_resizing {
             if let Some((pending_w, pending_h)) = self.handle.take_deferred_resize() {
                 if (pending_w, pending_h) != (cur_w, cur_h) {
                     self.handle.request_resize(pending_w, pending_h);
