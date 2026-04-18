@@ -5,7 +5,7 @@ use refineable::Refineable as _;
 
 use crate::{
     App, Bounds, Element, ElementId, GlobalElementId, InspectorElementId, IntoElement, LayoutId,
-    Pixels, Style, StyleRefinement, Styled, Window,
+    MouseButton, Pixels, Style, StyleRefinement, Styled, Window,
     platform::cross::surface_registry::{SurfaceId, SurfaceRegistry},
 };
 
@@ -293,6 +293,7 @@ pub fn wgpu_surface(handle: WgpuSurfaceHandle) -> WgpuSurface {
         handle,
         style: StyleRefinement::default(),
         on_resize: None,
+        pending_resize: Mutex::new(None),
     }
 }
 
@@ -308,6 +309,7 @@ pub struct WgpuSurface {
     handle: WgpuSurfaceHandle,
     style: StyleRefinement,
     on_resize: Option<Box<dyn Fn(u32, u32, &WgpuSurfaceHandle) + 'static>>,
+    pending_resize: Mutex<Option<(u32, u32)>>,
 }
 
 impl WgpuSurface {
@@ -363,10 +365,28 @@ impl Element for WgpuSurface {
         let pixel_h = (bounds.size.height.0 * scale).round() as u32;
 
         let (cur_w, cur_h) = self.handle.size();
+        let left_pressed = window.pressed_mouse_button() == Some(MouseButton::Left);
+
         if pixel_w != cur_w || pixel_h != cur_h {
-            self.handle.request_resize(pixel_w, pixel_h);
-            if let Some(cb) = &self.on_resize {
-                cb(pixel_w, pixel_h, &self.handle);
+            if left_pressed {
+                let mut pending = self.pending_resize.lock().unwrap();
+                *pending = Some((pixel_w, pixel_h));
+            } else {
+                self.handle.request_resize(pixel_w, pixel_h);
+                if let Some(cb) = &self.on_resize {
+                    cb(pixel_w, pixel_h, &self.handle);
+                }
+            }
+        }
+
+        if !left_pressed {
+            if let Some((pending_w, pending_h)) = self.pending_resize.lock().unwrap().take() {
+                if (pending_w, pending_h) != (cur_w, cur_h) {
+                    self.handle.request_resize(pending_w, pending_h);
+                    if let Some(cb) = &self.on_resize {
+                        cb(pending_w, pending_h, &self.handle);
+                    }
+                }
             }
         }
     }

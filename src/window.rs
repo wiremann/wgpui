@@ -867,6 +867,7 @@ pub struct Window {
     mouse_hit_test: HitTest,
     modifiers: Modifiers,
     capslock: Capslock,
+    mouse_button_pressed: Option<MouseButton>,
     scale_factor: f32,
     pub(crate) bounds_observers: SubscriberSet<(), AnyObserver>,
     appearance: WindowAppearance,
@@ -1290,6 +1291,7 @@ impl Window {
             mouse_hit_test: HitTest::default(),
             modifiers,
             capslock,
+            mouse_button_pressed: None,
             scale_factor,
             bounds_observers: SubscriberSet::new(),
             appearance,
@@ -1577,6 +1579,7 @@ impl Window {
             mouse_hit_test: HitTest::default(),
             modifiers,
             capslock,
+            mouse_button_pressed: None,
             scale_factor,
             bounds_observers: SubscriberSet::new(),
             appearance,
@@ -2248,6 +2251,11 @@ impl Window {
     /// The position of the mouse relative to the window.
     pub fn mouse_position(&self) -> Point<Pixels> {
         self.mouse_position
+    }
+
+    /// The current pressed mouse button, if any.
+    pub fn pressed_mouse_button(&self) -> Option<MouseButton> {
+        self.mouse_button_pressed
     }
 
     /// The current state of the keyboard's modifiers
@@ -4012,6 +4020,7 @@ impl Window {
                 }
                 self.mouse_position = mouse_down.position;
                 self.modifiers = mouse_down.modifiers;
+                self.mouse_button_pressed = Some(mouse_down.button);
                 PlatformInput::MouseDown(mouse_down)
             }
             PlatformInput::MouseUp(mouse_up) => {
@@ -4025,6 +4034,9 @@ impl Window {
                 }
                 self.mouse_position = mouse_up.position;
                 self.modifiers = mouse_up.modifiers;
+                if self.mouse_button_pressed == Some(mouse_up.button) {
+                    self.mouse_button_pressed = None;
+                }
                 PlatformInput::MouseUp(mouse_up)
             }
             PlatformInput::MouseExited(mouse_exited) => {
