@@ -876,6 +876,7 @@ pub struct Window {
     hovered: Rc<Cell<bool>>,
     pub(crate) needs_present: Rc<Cell<bool>>,
     pub(crate) last_input_timestamp: Rc<Cell<Instant>>,
+    pub(crate) resizing_window: Rc<Cell<bool>>,
     last_input_modality: InputModality,
     pub(crate) refreshing: bool,
     pub(crate) activation_observers: SubscriberSet<(), AnyObserver>,
@@ -2036,9 +2037,12 @@ impl Window {
     }
 
     fn bounds_changed(&mut self, cx: &mut App) {
+        let previous_viewport_size = self.viewport_size;
         self.scale_factor = self.platform_window.scale_factor();
         self.viewport_size = self.platform_window.content_size();
         self.display_id = self.platform_window.display().map(|display| display.id());
+        self.resizing_window
+            .set(previous_viewport_size != self.viewport_size);
 
         self.refresh();
 
@@ -2276,6 +2280,12 @@ impl Window {
 
     fn complete_frame(&self) {
         self.platform_window.completed_frame();
+        self.resizing_window.set(false);
+    }
+
+    /// Returns true if the platform window is currently resizing.
+    pub fn is_window_resizing(&self) -> bool {
+        self.resizing_window.get()
     }
 
     /// Produces a new frame and assigns it to `rendered_frame`. To actually show

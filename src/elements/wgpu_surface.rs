@@ -316,7 +316,6 @@ pub fn wgpu_surface(handle: WgpuSurfaceHandle) -> WgpuSurface {
         handle,
         style: StyleRefinement::default(),
         on_resize: None,
-        pending_resize: Mutex::new(None),
         defer_resize_until_mouse_up: false,
     }
 }
@@ -333,7 +332,6 @@ pub struct WgpuSurface {
     handle: WgpuSurfaceHandle,
     style: StyleRefinement,
     on_resize: Option<Box<dyn Fn(u32, u32, &WgpuSurfaceHandle) + 'static>>,
-    pending_resize: Mutex<Option<(u32, u32)>>,
     defer_resize_until_mouse_up: bool,
 }
 
@@ -397,9 +395,10 @@ impl Element for WgpuSurface {
 
         let (cur_w, cur_h) = self.handle.size();
         let left_pressed = window.pressed_mouse_button() == Some(MouseButton::Left);
+        let window_resizing = window.is_window_resizing();
 
         if pixel_w != cur_w || pixel_h != cur_h {
-            if self.defer_resize_until_mouse_up && left_pressed {
+            if self.defer_resize_until_mouse_up && (left_pressed || window_resizing) {
                 self.handle.defer_resize(pixel_w, pixel_h);
             } else {
                 self.handle.request_resize(pixel_w, pixel_h);
