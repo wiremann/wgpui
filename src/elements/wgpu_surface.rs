@@ -25,6 +25,9 @@ struct WgpuSurfaceHandleInner {
     pending_resize: Mutex<Option<(u32, u32)>>,
     deferred_resize: Mutex<Option<(u32, u32)>>,
     is_resizing: AtomicBool,
+    /// Remembers whether the window was resizing last prepaint so we can detect
+    /// the transition `was_resizing=true -> false` across GPUI frame recreations.
+    prev_window_resizing: AtomicBool,
     format: wgpu::TextureFormat,
 }
 
@@ -78,6 +81,7 @@ impl WgpuSurfaceHandle {
                 pending_resize: Mutex::new(None),
                 deferred_resize: Mutex::new(None),
                 is_resizing: AtomicBool::new(false),
+                prev_window_resizing: AtomicBool::new(false),
                 format,
             }),
         }
@@ -317,7 +321,6 @@ pub fn wgpu_surface(handle: WgpuSurfaceHandle) -> WgpuSurface {
         style: StyleRefinement::default(),
         on_resize: None,
         defer_resize_until_mouse_up: false,
-        was_window_resizing: false,
     }
 }
 
@@ -334,8 +337,6 @@ pub struct WgpuSurface {
     style: StyleRefinement,
     on_resize: Option<Box<dyn Fn(u32, u32, &WgpuSurfaceHandle) + 'static>>,
     defer_resize_until_mouse_up: bool,
-    /// Tracks previous frame's window_resizing state to detect OS resize completion.
-    was_window_resizing: bool,
 }
 
 impl WgpuSurface {
@@ -401,9 +402,10 @@ impl Element for WgpuSurface {
         let window_resizing = window.is_window_resizing();
         // True on the first frame after OS window resize ends — force-flush even if
         // the mouse button state didn't update (macOS may not deliver mouse-up for
-        // resize-handle drags that the OS owns).
-        let os_resize_just_ended = self.was_window_resizing && !window_resizing;
-        self.was_window_resizing = window_resizing;
+        // resize-handle drags that the OS owns).  Stored in the persistent handle
+        // so it survives GPUI recreating this element each frame.
+        let prev_resizing = self.handle.inner.prev_window_resizing.swap(window_resizing, Ordering::Relaxed);
+        let os_resize_just_ended = prev_resizing && !window_resizing;
 
         if pixel_w != cur_w || pixel_h != cur_h {
             if self.defer_resize_until_mouse_up && (left_pressed || window_resizing) {
