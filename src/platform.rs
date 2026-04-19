@@ -1072,6 +1072,44 @@ pub struct WindowOptions {
 
     /// Tab group name, allows opening the window as a native tab on macOS 10.12+. Windows with the same tabbing identifier will be grouped together.
     pub tabbing_identifier: Option<String>,
+
+    /// Window/application icon.
+    ///
+    /// On Windows this appears in the titlebar and taskbar.
+    /// On macOS this sets the application Dock icon for the process lifetime.
+    /// Supply `None` to use the platform default.
+    pub app_icon: Option<WindowIcon>,
+}
+
+/// A window or application icon expressed as raw RGBA pixels.
+///
+/// Build one with [`WindowIcon::from_rgba`] or [`WindowIcon::from_png_bytes`].
+#[derive(Debug, Clone)]
+pub struct WindowIcon {
+    /// RGBA pixel data, row-major top-to-bottom. Length must equal `width * height * 4`.
+    pub rgba: Vec<u8>,
+    /// Image width in pixels.
+    pub width: u32,
+    /// Image height in pixels.
+    pub height: u32,
+}
+
+impl WindowIcon {
+    /// Construct a `WindowIcon` from a raw RGBA buffer.
+    /// Returns `None` when `rgba.len() != width * height * 4`.
+    pub fn from_rgba(rgba: Vec<u8>, width: u32, height: u32) -> Option<Self> {
+        if rgba.len() != (width * height * 4) as usize {
+            return None;
+        }
+        Some(Self { rgba, width, height })
+    }
+
+    /// Decode any image format supported by the `image` crate (PNG, ICO, …) from bytes.
+    pub fn from_png_bytes(bytes: &[u8]) -> anyhow::Result<Self> {
+        let img = image::load_from_memory(bytes)?.into_rgba8();
+        let (width, height) = img.dimensions();
+        Ok(Self { rgba: img.into_raw(), width, height })
+    }
 }
 
 /// The variables that can be configured when creating a new window
@@ -1103,6 +1141,7 @@ pub(crate) struct WindowParams {
     pub window_min_size: Option<Size<Pixels>>,
     pub tabbing_identifier: Option<String>,
     pub window_decorations: Option<WindowDecorations>,
+    pub app_icon: Option<WindowIcon>,
 }
 
 /// Represents the status of how a window should be opened.
@@ -1161,6 +1200,7 @@ impl Default for WindowOptions {
             window_min_size: None,
             window_decorations: None,
             tabbing_identifier: None,
+            app_icon: None,
         }
     }
 }

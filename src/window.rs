@@ -1005,6 +1005,7 @@ impl Window {
             window_min_size,
             window_decorations,
             tabbing_identifier,
+            app_icon,
         } = options;
 
         let window_bounds = window_bounds.unwrap_or_else(|| default_bounds(display_id, cx));
@@ -1023,6 +1024,7 @@ impl Window {
                 window_min_size,
                 tabbing_identifier,
                 window_decorations,
+                app_icon,
             },
         )?;
 
