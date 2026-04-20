@@ -2276,7 +2276,7 @@ impl AppContext for App {
         read(entity, self)
     }
 
-    fn update_window<T, F>(&mut self, handle: AnyWindowHandle, update: F) -> Result<T>
+    pub fn update_window<T, F>(&mut self, handle: AnyWindowHandle, update: F) -> Result<T>
     where
         F: FnOnce(AnyView, &mut Window, &mut App) -> T,
     {
