@@ -1431,7 +1431,15 @@ impl App {
         F: FnOnce(AnyView, &mut Window, &mut App) -> T,
     {
         self.update(|cx| {
-            let mut window = cx.windows.get_mut(id)?.take()?;
+            let slot = cx.windows.get_mut(id);
+            if slot.is_none() {
+                eprintln!("[wgpui] update_window_id: window {:?} not in map", id);
+            }
+            let mut window = slot?.take();
+            if window.is_none() {
+                eprintln!("[wgpui] update_window_id: window {:?} slot is None (on update stack)", id);
+            }
+            let mut window = window?;
 
             let root_view = window.root.clone().unwrap();
 
@@ -1440,8 +1448,10 @@ impl App {
             cx.window_update_stack.pop();
 
             if window.removed {
+                eprintln!("[wgpui] window {:?} removed — windows remaining before: {}", id, cx.windows.len());
                 cx.window_handles.remove(&id);
                 cx.windows.remove(id);
+                eprintln!("[wgpui] windows remaining after removal: {}", cx.windows.len());
 
                 cx.window_closed_observers.clone().retain(&(), |callback| {
                     callback(cx);
@@ -1454,7 +1464,9 @@ impl App {
                     QuitMode::Default => cfg!(not(target_os = "macos")),
                 };
 
+                eprintln!("[wgpui] quit_on_empty={quit_on_empty}, windows_empty={}", cx.windows.is_empty());
                 if quit_on_empty && cx.windows.is_empty() {
+                    eprintln!("[wgpui] calling cx.quit()!");
                     cx.quit();
                 }
             } else {
