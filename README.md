@@ -6,18 +6,6 @@ The public API is kept intentionally compatible with gpui-ce so existing applica
 
 ---
 
-## Differences from gpui-ce
-
-| | gpui-ce | WGPUI |
-|---|---|---|
-| Rendering | Metal / Vulkan / D3D12 per platform | wgpu (single backend, all platforms) |
-| Windowing | Cocoa / Win32 / Wayland+X11 | winit |
-| Platform modules | Per-OS (`platform/linux`, `platform/mac`, `platform/windows`) | Single `platform/cross` module |
-| WebAssembly | Not supported | Supported via wgpu's `webgpu` feature |
-| 3D surface integration | None | `WgpuSurface` element for embedding wgpu render passes directly in UI |
-
----
-
 ## Adding to your project
 
 ```toml
