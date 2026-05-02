@@ -1,59 +1,30 @@
 # WGPUI
 A community fork of [GPUI](https://gpui.rs), Zed's GPU-accelerated UI framework rewritten to use WGPU!
 
-A community fork of [GPUI](https://gpui.rs), Zed's GPU-accelerated UI framework.
-
 ## Usage
 
 ```toml
 [dependencies]
-gpui = { package = "gpui-ce", version = "0.3" }
+wgpui = { package = "gpui-ce", version = "0.3" }
 
 # for test support...
 [dev-dependencies]
-gpui = { package = "gpui-ce", version = "0.3", features = ["test-support"] }
+wgpui = { package = "gpui-ce", version = "0.3", features = ["test-support"] }
 ```
 
 Then use `gpui::{import}` as normal.
 
 ---
 
-todo: rewrite below...
+# Welcome to WGPUI!
 
-# Welcome to GPUI!
+WGPUI is a WGPU and Winit fork of the hybrid immediate and retained mode, GPU accelerated, UI framework developed by the Zed team for Rust. It is designed to support a wide variety of applications.
 
-GPUI is a hybrid immediate and retained mode, GPU accelerated, UI framework
-for Rust, designed to support a wide variety of applications.
-
-Everything in GPUI starts with an `Application`. You can create one with `Application::new()`, and kick off your application by passing a callback to `Application::run()`. Inside this callback, you can create a new window with `App::open_window()`, and register your first root view. See [gpui.rs](https://www.gpui.rs/) for a complete example.
-
-### Dependencies
-
-GPUI has various system dependencies that it needs in order to work.
-
-#### macOS
-
-On macOS, GPUI uses Metal for rendering. In order to use Metal, you need to do the following:
-
-- Install [Xcode](https://apps.apple.com/us/app/xcode/id497799835?mt=12) from the macOS App Store, or from the [Apple Developer](https://developer.apple.com/download/all/) website. Note this requires a developer account.
-
-> Ensure you launch Xcode after installing, and install the macOS components, which is the default option.
-
-- Install [Xcode command line tools](https://developer.apple.com/xcode/resources/)
-
-  ```sh
-  xcode-select --install
-  ```
-
-- Ensure that the Xcode command line tools are using your newly installed copy of Xcode:
-
-  ```sh
-  sudo xcode-select --switch /Applications/Xcode.app/Contents/Developer
-  ```
+Everything in WGPUI starts with an `Application`. You can create one with `Application::new()`, and kick off your application by passing a callback to `Application::run()`. Inside this callback, you can create a new window with `App::open_window()`, and register your first root view. See [gpui.rs](https://www.gpui.rs/) for a complete example.
 
 ## The Big Picture
 
-GPUI offers three different [registers](<https://en.wikipedia.org/wiki/Register_(sociolinguistics)>) depending on your needs:
+WGPUI offers three different [registers](<https://en.wikipedia.org/wiki/Register_(sociolinguistics)>) depending on your needs:
 
 - State management and communication with `Entity`'s. Whenever you need to store application state that communicates between different parts of your application, you'll want to use GPUI's entities. Entities are owned by GPUI and are only accessible through an owned smart pointer similar to an `Rc`. See the `app::context` module for more information.
 
