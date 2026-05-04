@@ -8,7 +8,7 @@ use crate::{
     PlatformAtlas, Pixels, PrimitiveBatch, Quad, ScaledPixels, Scene, TransformationMatrix,
     color, geometry,
     platform::cross::{
-        atlas::WgpuAtlas, render_context::WgpuContext,
+        atlas::WgpuAtlas, render_context::{WgpuContext, ensure_buffer_size},
         surface_registry::SurfaceId,
     },
 };
@@ -1407,7 +1407,7 @@ impl WgpuRenderer {
         })
     }
 
-    pub fn draw(&self, scene: &Scene) {
+    pub fn draw(&mut self, scene: &Scene) {
         log::debug!("Renderer::draw: starting frame");
 
         let mut command_encoder =
@@ -1467,39 +1467,69 @@ impl WgpuRenderer {
         }
 
         if !scene.quads.is_empty() {
+            let data = unsafe { as_bytes(&scene.quads) };
+            ensure_buffer_size(
+                &self.context.device,
+                &mut self.context.quads_buffer,
+                data.len() as u64,
+                "Quads Buffer",
+                wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::STORAGE,
+            );
             self.context
                 .queue
-                .write_buffer(&self.context.quads_buffer, 0, unsafe {
-                    as_bytes(&scene.quads)
-                });
+                .write_buffer(&self.context.quads_buffer, 0, data);
         }
         if !scene.shadows.is_empty() {
+            let data = unsafe { as_bytes(&scene.shadows) };
+            ensure_buffer_size(
+                &self.context.device,
+                &mut self.context.shadows_buffer,
+                data.len() as u64,
+                "Shadows Buffer",
+                wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::STORAGE,
+            );
             self.context
                 .queue
-                .write_buffer(&self.context.shadows_buffer, 0, unsafe {
-                    as_bytes(&scene.shadows)
-                });
+                .write_buffer(&self.context.shadows_buffer, 0, data);
         }
         if !scene.underlines.is_empty() {
+            let data = unsafe { as_bytes(&scene.underlines) };
+            ensure_buffer_size(
+                &self.context.device,
+                &mut self.context.underlines_buffer,
+                data.len() as u64,
+                "Underlines Buffer",
+                wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::STORAGE,
+            );
             self.context
                 .queue
-                .write_buffer(&self.context.underlines_buffer, 0, unsafe {
-                    as_bytes(&scene.underlines)
-                });
+                .write_buffer(&self.context.underlines_buffer, 0, data);
         }
         if !scene.monochrome_sprites.is_empty() {
+            let data = unsafe { as_bytes(&scene.monochrome_sprites) };
+            ensure_buffer_size(
+                &self.context.device,
+                &mut self.context.mono_sprites_buffer,
+                data.len() as u64,
+                "Monosprites Buffer",
+                wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::STORAGE,
+            );
             self.context
                 .queue
-                .write_buffer(&self.context.mono_sprites_buffer, 0, unsafe {
-                    as_bytes(&scene.monochrome_sprites)
-                });
+                .write_buffer(&self.context.mono_sprites_buffer, 0, data);
         }
         if !scene.polychrome_sprites.is_empty() {
+            let data = unsafe { as_bytes(&scene.polychrome_sprites) };
+            ensure_buffer_size(
+                &self.context.device,
+                &mut self.context.poly_sprites_buffer,
+                data.len() as u64,
+                "Poly Sprites Buffer",
+                wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::STORAGE,
+            );
             self.context
                 .queue
-                .write_buffer(&self.context.poly_sprites_buffer, 0, unsafe {
-                    as_bytes(&scene.polychrome_sprites)
-                });
+                .write_buffer(&self.context.poly_sprites_buffer, 0, data);
         }
 
         // Build flat vertex array for all paths (color + content mask baked per-vertex)
@@ -1520,10 +1550,18 @@ impl WgpuRenderer {
             }
         }
         if !flat_path_vertices.is_empty() {
+            let data = bytemuck::cast_slice(&flat_path_vertices);
+            ensure_buffer_size(
+                &self.context.device,
+                &mut self.context.paths_vertices_buffer,
+                data.len() as u64,
+                "Path Vertices Buffer",
+                wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST,
+            );
             self.context.queue.write_buffer(
                 &self.context.paths_vertices_buffer,
                 0,
-                bytemuck::cast_slice(&flat_path_vertices),
+                data,
             );
         }
 

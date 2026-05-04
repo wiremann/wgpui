@@ -356,7 +356,7 @@ impl PlatformWindow for CrossWindow {
 
     fn draw(&self, scene: &crate::Scene) {
         if let Some(renderer) = self.0.renderer.get() {
-            renderer.borrow().draw(scene);
+            renderer.borrow_mut().draw(scene);
         }
     }
 

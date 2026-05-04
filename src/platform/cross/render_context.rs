@@ -169,4 +169,26 @@ impl WgpuContext {
             surface_registry: Arc::new(SurfaceRegistry::new()),
         })
     }
+
+}
+
+/// Ensures a buffer is large enough to hold the required size.
+/// If the buffer is too small, it will be recreated with the new size.
+pub(super) fn ensure_buffer_size(
+    device: &wgpu::Device,
+    buffer: &mut wgpu::Buffer,
+    required_size: u64,
+    label: &str,
+    usage: wgpu::BufferUsages,
+) {
+    if buffer.size() < required_size {
+        // Recreate buffer with new size (add some headroom to avoid frequent reallocations)
+        let new_size = (required_size * 3 / 2).max(required_size + 1024 * 1024);
+        *buffer = device.create_buffer(&wgpu::BufferDescriptor {
+            label: Some(label),
+            size: new_size,
+            usage,
+            mapped_at_creation: false,
+        });
+    }
 }
