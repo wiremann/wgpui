@@ -1,3 +1,4 @@
+use std::cell::RefCell;
 use std::sync::Arc;
 
 use super::surface_registry::SurfaceRegistry;
@@ -9,13 +10,13 @@ pub struct WgpuContext {
     pub(super) instance: wgpu::Instance,
 
     pub(super) globals_buffer: wgpu::Buffer,
-    pub(super) quads_buffer: wgpu::Buffer,
-    pub(super) shadows_buffer: wgpu::Buffer,
-    pub(super) underlines_buffer: wgpu::Buffer,
-    pub(super) mono_sprites_buffer: wgpu::Buffer,
-    pub(super) poly_sprites_buffer: wgpu::Buffer,
+    pub(super) quads_buffer: RefCell<wgpu::Buffer>,
+    pub(super) shadows_buffer: RefCell<wgpu::Buffer>,
+    pub(super) underlines_buffer: RefCell<wgpu::Buffer>,
+    pub(super) mono_sprites_buffer: RefCell<wgpu::Buffer>,
+    pub(super) poly_sprites_buffer: RefCell<wgpu::Buffer>,
     pub(super) color_adjustments_buffer: wgpu::Buffer,
-        pub(super) paths_vertices_buffer: wgpu::Buffer,
+        pub(super) paths_vertices_buffer: RefCell<wgpu::Buffer>,
 
     pub(crate) surface_registry: Arc<SurfaceRegistry>,
 }
@@ -158,14 +159,14 @@ impl WgpuContext {
             instance,
 
             globals_buffer,
-            quads_buffer,
-            shadows_buffer,
-            underlines_buffer,
-            mono_sprites_buffer,
-            poly_sprites_buffer,
+            quads_buffer: RefCell::new(quads_buffer),
+            shadows_buffer: RefCell::new(shadows_buffer),
+            underlines_buffer: RefCell::new(underlines_buffer),
+            mono_sprites_buffer: RefCell::new(mono_sprites_buffer),
+            poly_sprites_buffer: RefCell::new(poly_sprites_buffer),
             color_adjustments_buffer,
 
-                paths_vertices_buffer,
+                paths_vertices_buffer: RefCell::new(paths_vertices_buffer),
             surface_registry: Arc::new(SurfaceRegistry::new()),
         })
     }
