@@ -158,11 +158,11 @@ impl WgpuContext {
             instance,
 
             globals_buffer,
-            quads_buffer: RefCell::new(quads_buffer),
-            shadows_buffer: RefCell::new(shadows_buffer),
-            underlines_buffer: RefCell::new(underlines_buffer),
-            mono_sprites_buffer: RefCell::new(mono_sprites_buffer),
-            poly_sprites_buffer: RefCell::new(poly_sprites_buffer),
+            quads_buffer: Mutex::new(quads_buffer),
+            shadows_buffer: Mutex::new(shadows_buffer),
+            underlines_buffer: Mutex::new(underlines_buffer),
+            mono_sprites_buffer: Mutex::new(mono_sprites_buffer),
+            poly_sprites_buffer: Mutex::new(poly_sprites_buffer),
             color_adjustments_buffer,
 
                 paths_vertices_buffer: RefCell::new(paths_vertices_buffer),
