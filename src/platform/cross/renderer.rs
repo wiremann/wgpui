@@ -1852,7 +1852,6 @@ impl WgpuRenderer {
                         log::debug!("Renderer: processing {} surface(s)", surfaces.len());
                         for surface in surfaces {
                             if let crate::SurfaceContent::Wgpu(surface_id) = &surface.content {
-                                log::info!("[COMPOSITOR PAINT] Processing WGPU surface {:?}", surface_id);
 
                                 // Atomically swap ready ↔ display buffers with GPU sync
                                 let swapped = self.context.surface_registry.swap_ready_display(
@@ -1860,12 +1859,10 @@ impl WgpuRenderer {
                                     *surface_id
                                 );
 
-                                log::info!("[COMPOSITOR PAINT] Swap result: {}", swapped);
 
                                 if let Some(view) =
                                     self.context.surface_registry.front_view(*surface_id)
                                 {
-                                    log::info!("[COMPOSITOR PAINT] Got front view for surface {:?}", surface_id);
 
                                     let params = SurfaceParams {
                                         bounds: Bounds {
