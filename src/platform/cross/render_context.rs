@@ -27,11 +27,15 @@ impl WgpuContext {
             ..Default::default()
         });
 
+        // NOTE: INDIRECT_FIRST_INSTANCE is required for indirect draw commands
+        // that rely on non-zero firstInstance to index per-instance scene data.
+        // Engines embedding WGPUI (e.g. Helio-based viewports) use this path.
         let required_features = wgpu::Features::TIMESTAMP_QUERY
             | wgpu::Features::TIMESTAMP_QUERY_INSIDE_ENCODERS
             | wgpu::Features::TEXTURE_BINDING_ARRAY
             | wgpu::Features::SAMPLED_TEXTURE_AND_STORAGE_BUFFER_ARRAY_NON_UNIFORM_INDEXING
-            | wgpu::Features::SHADER_PRIMITIVE_INDEX;
+            | wgpu::Features::SHADER_PRIMITIVE_INDEX
+            | wgpu::Features::INDIRECT_FIRST_INSTANCE;
 
         let adapters = pollster::block_on(instance.enumerate_adapters(wgpu::Backends::all()));
 

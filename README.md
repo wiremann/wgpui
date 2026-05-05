@@ -25,6 +25,18 @@ use gpui::{App, Application, Context, Render, Window, div, px};
 
 ---
 
+## Custom Device Gotcha
+
+If you embed an external renderer that uses indirect draws with non-zero `firstInstance`
+(for example, Helio scene rendering inside `WgpuSurfaceHandle`), your device must enable
+`wgpu::Features::INDIRECT_FIRST_INSTANCE`.
+
+Without this feature, many backends/drivers skip indirect draws where `firstInstance > 0`,
+which can look like only the first object in a scene renders.
+
+WGPUI now enables this feature when creating its internal device. If you provide your own
+wgpu device/context around WGPUI, ensure you request the same feature set.
+
 ## Hello World
 
 ```rust
