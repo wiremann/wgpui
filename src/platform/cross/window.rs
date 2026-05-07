@@ -44,6 +44,9 @@ pub(crate) struct CrossWindowState {
     /// that OS-level fallbacks (e.g. Windows Acrylic going opaque) are
     /// overridden.
     pub(crate) always_transparent: Cell<bool>,
+    /// Last applied background appearance, used to re-assert the full
+    /// backdrop (including system blur) when focus is lost.
+    pub(crate) background_appearance: Cell<WindowBackgroundAppearance>,
 }
 
 #[derive(Default)]
@@ -279,6 +282,7 @@ impl PlatformWindow for CrossWindow {
     }
 
     fn set_background_appearance(&self, background_appearance: WindowBackgroundAppearance) {
+        self.0.state.background_appearance.set(background_appearance);
         let window = self.window();
 
         let transparent = match background_appearance {

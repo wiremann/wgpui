@@ -724,12 +724,13 @@ impl winit::application::ApplicationHandler<CrossEvent> for AppState {
             }
 
             winit::event::WindowEvent::Focused(active) => {
-                // If always_transparent is set, re-assert transparency on focus-loss
-                // so OS fallbacks (e.g. Windows Acrylic going opaque) are overridden.
-                if !active && window.0.state.always_transparent.get() {
-                    if let Some(renderer) = window.0.renderer.get() {
-                        renderer.borrow_mut().update_transparency(true);
-                    }
+                // If always_transparent is set, re-assert the full background
+                // appearance (including system backdrop / blur) on both focus-gain
+                // and focus-loss, so OS fallbacks (e.g. Windows Acrylic going
+                // opaque when unfocused) are always overridden.
+                if window.0.state.always_transparent.get() {
+                    let appearance = window.0.state.background_appearance.get();
+                    window.set_background_appearance(appearance);
                 }
                 window
                     .0
