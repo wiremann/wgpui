@@ -40,6 +40,10 @@ pub(crate) struct CrossWindowState {
     pub(crate) capslock: Cell<Capslock>,
     pub(crate) is_hovered: Cell<bool>,
     pub(crate) resize_detector: ResizeDetector,
+    /// When true, transparency is re-asserted on every focus-lost event so
+    /// that OS-level fallbacks (e.g. Windows Acrylic going opaque) are
+    /// overridden.
+    pub(crate) always_transparent: Cell<bool>,
 }
 
 #[derive(Default)]
@@ -317,6 +321,17 @@ impl PlatformWindow for CrossWindow {
 
         if let Some(renderer) = self.0.renderer.get() {
             renderer.borrow_mut().update_transparency(transparent);
+        }
+    }
+
+    fn set_always_transparent(&self, value: bool) {
+        self.0.state.always_transparent.set(value);
+        // If enabling and we already have a renderer, assert transparency now
+        // in case the window is currently inactive.
+        if value {
+            if let Some(renderer) = self.0.renderer.get() {
+                renderer.borrow_mut().update_transparency(true);
+            }
         }
     }
 

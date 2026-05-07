@@ -207,6 +207,8 @@ impl PlatformWindow for TestWindow {
 
     fn set_background_appearance(&self, _background: WindowBackgroundAppearance) {}
 
+    fn set_always_transparent(&self, _value: bool) {}
+
     fn set_edited(&mut self, edited: bool) {
         self.0.lock().edited = edited;
     }

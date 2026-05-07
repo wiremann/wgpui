@@ -1007,6 +1007,7 @@ impl Window {
             window_decorations,
             tabbing_identifier,
             app_icon,
+            always_transparent,
         } = options;
 
         let window_bounds = window_bounds.unwrap_or_else(|| default_bounds(display_id, cx));
@@ -1027,6 +1028,7 @@ impl Window {
                 tabbing_identifier,
                 window_decorations,
                 app_icon,
+                always_transparent,
             },
         )?;
 
@@ -2156,6 +2158,15 @@ impl Window {
     pub fn set_background_appearance(&self, background_appearance: WindowBackgroundAppearance) {
         self.platform_window
             .set_background_appearance(background_appearance);
+    }
+
+    /// Controls whether the window stays transparent even when it loses OS focus.
+    ///
+    /// When `true`, any focus-lost event that would otherwise make the window
+    /// opaque (e.g. Windows Acrylic) is counteracted by re-asserting
+    /// the transparent clear colour in the renderer.
+    pub fn set_always_transparent(&self, value: bool) {
+        self.platform_window.set_always_transparent(value);
     }
 
     /// Mark the window as dirty at the platform level.
