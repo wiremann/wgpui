@@ -1917,6 +1917,16 @@ impl WgpuRenderer {
                 });
 
         {
+            let clear_color = match self.surface_configuration.alpha_mode {
+                wgpu::CompositeAlphaMode::Opaque => wgpu::Color::BLACK,
+                _ => wgpu::Color {
+                    r: 0.0,
+                    g: 0.0,
+                    b: 0.0,
+                    a: 0.0,
+                },
+            };
+
             // Render to swapchain directly for now (TODO: render to framebuffer, then blit)
             let mut pass = command_encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
                 label: Some("main"),
@@ -1925,7 +1935,7 @@ impl WgpuRenderer {
                         .texture
                         .create_view(&wgpu::TextureViewDescriptor::default()),
                     ops: wgpu::Operations {
-                        load: wgpu::LoadOp::Clear(wgpu::Color::BLACK),
+                        load: wgpu::LoadOp::Clear(clear_color),
                         store: wgpu::StoreOp::Store,
                     },
                     resolve_target: None,
