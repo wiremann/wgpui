@@ -1367,6 +1367,9 @@ pub struct WgpuRenderer {
 
     // Layout version counter (incremented when compositor runs)
     layout_version: Arc<AtomicU64>,
+
+    // Alpha modes supported by this surface (queried once at creation)
+    supported_alpha_modes: Vec<wgpu::CompositeAlphaMode>,
 }
 
 impl WgpuRenderer {
@@ -1536,6 +1539,7 @@ impl WgpuRenderer {
             backdrop_blur_texture_view: Some(backdrop_blur_texture_view),
             surface_bounds_cache: Arc::new(Mutex::new(HashMap::new())),
             layout_version: Arc::new(AtomicU64::new(0)),
+            supported_alpha_modes: surface_capabilities.alpha_modes,
         })
     }
 
@@ -2502,11 +2506,21 @@ impl WgpuRenderer {
 
     pub fn update_transparency(&mut self, transparent: bool) {
         self.surface_configuration.alpha_mode = if transparent {
-            wgpu::CompositeAlphaMode::PreMultiplied
+            // Pick the best transparent alpha mode the surface supports.
+            if self.supported_alpha_modes.contains(&wgpu::CompositeAlphaMode::PreMultiplied) {
+                wgpu::CompositeAlphaMode::PreMultiplied
+            } else if self.supported_alpha_modes.contains(&wgpu::CompositeAlphaMode::PostMultiplied) {
+                wgpu::CompositeAlphaMode::PostMultiplied
+            } else {
+                // Surface doesn't support transparency; use whatever it does support.
+                self.supported_alpha_modes[0]
+            }
         } else {
-            // TODO(mdeand): Support for non-X11?
-            // wgpu::CompositeAlphaMode::Opaque
-            wgpu::CompositeAlphaMode::Inherit
+            if self.supported_alpha_modes.contains(&wgpu::CompositeAlphaMode::Opaque) {
+                wgpu::CompositeAlphaMode::Opaque
+            } else {
+                self.supported_alpha_modes[0]
+            }
         };
         self.surface
             .configure(&self.context.device, &self.surface_configuration);
