@@ -673,6 +673,12 @@ pub trait Styled: Sized {
         self
     }
 
+    /// Sets a fast, frosted blur radius for this element and its children.
+    fn blur(mut self, blur_radius: f32) -> Self {
+        self.style().blur = Some(blur_radius.max(0.0));
+        self
+    }
+
     /// Sets the grid columns of this element.
     fn grid_cols(mut self, cols: u16) -> Self {
         self.style().grid_cols = Some(cols);

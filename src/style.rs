@@ -8,8 +8,8 @@ use crate::{
     AbsoluteLength, App, Background, BackgroundTag, BorderStyle, Bounds, ContentMask, Corners,
     CornersRefinement, CursorStyle, DefiniteLength, DevicePixels, Edges, EdgesRefinement, Font,
     FontFallbacks, FontFeatures, FontStyle, FontWeight, GridLocation, Hsla, Length, Pixels, Point,
-    PointRefinement, Rgba, SharedString, Size, SizeRefinement, Styled, TextRun, Window, black, phi,
-    point, quad, rems, size,
+    PointRefinement, Rgba, SharedString, Size, SizeRefinement, Styled, TextRun, Window, black,
+    transparent_black, transparent_white, phi, point, quad, rems, size,
 };
 use collections::HashSet;
 use refineable::Refineable;
@@ -260,6 +260,9 @@ pub struct Style {
 
     /// The opacity of this element
     pub opacity: Option<f32>,
+
+    /// A fast, frosted blur radius for this element and its children.
+    pub blur: Option<f32>,
 
     /// The grid columns of this element
     /// Equivalent to the Tailwind `grid-cols-<number>`
@@ -625,6 +628,26 @@ impl Style {
             .to_pixels(rem_size)
             .clamp_radii_for_quad_size(bounds.size);
 
+        let blur_radius = window.element_blur();
+        if blur_radius > 0.0 {
+            let blur_pixels = Pixels(blur_radius);
+            let opacity = window.element_opacity();
+            let blur_glow = BoxShadow {
+                color: transparent_white().opacity(0.14 * opacity),
+                offset: Point::default(),
+                blur_radius: blur_pixels,
+                spread_radius: Pixels::ZERO,
+            };
+            let blur_depth = BoxShadow {
+                color: transparent_black().opacity(0.06 * opacity),
+                offset: Point::default(),
+                blur_radius: blur_pixels,
+                spread_radius: Pixels::ZERO,
+            };
+            let blur_shadows = [blur_glow, blur_depth];
+            window.paint_shadows(bounds, corner_radii, &blur_shadows);
+        }
+
         window.paint_shadows(bounds, corner_radii, &self.box_shadow);
 
         let background_color = self.background.as_ref().and_then(Fill::color);
@@ -770,6 +793,7 @@ impl Default for Style {
             text: TextStyleRefinement::default(),
             mouse_cursor: None,
             opacity: None,
+            blur: None,
             grid_rows: None,
             grid_cols: None,
             grid_location: None,
