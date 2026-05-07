@@ -1144,6 +1144,8 @@ pub(crate) struct WindowParams {
 
     pub display_id: Option<DisplayId>,
 
+    pub window_background: WindowBackgroundAppearance,
+
     pub window_min_size: Option<Size<Pixels>>,
     pub tabbing_identifier: Option<String>,
     pub window_decorations: Option<WindowDecorations>,

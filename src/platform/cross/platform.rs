@@ -201,6 +201,10 @@ impl Platform for CrossPlatform {
                 options.window_decorations,
                 Some(crate::WindowDecorations::Client)
             );
+            let transparent = !matches!(
+                options.window_background,
+                crate::WindowBackgroundAppearance::Opaque
+            );
             let mut attributes = winit::window::Window::default_attributes()
                 .with_title(
                     options
@@ -211,6 +215,7 @@ impl Platform for CrossPlatform {
                         .unwrap_or_else(|| "GPUI".into()),
                 )
                 .with_decorations(!use_client_decorations)
+                .with_transparent(transparent)
                 .with_resizable(options.is_resizable)
                 .with_inner_size(winit::dpi::LogicalSize::new(
                     bounds.size.width.0 as f64,

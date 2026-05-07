@@ -1022,6 +1022,7 @@ impl Window {
                 focus,
                 show,
                 display_id,
+                window_background,
                 window_min_size,
                 tabbing_identifier,
                 window_decorations,
