@@ -783,8 +783,8 @@ pub fn linear_gradient(
 pub struct GradientStop {
     /// The color of the color stop.
     pub color: Hsla,
-    /// The percentage of the gradient, in the range 0.0 to 1.0.
-    pub percentage: f32,
+    /// The position of the gradient, in the range 0.0 to 1.0.
+    pub position: f32,
 }
 
 /// Generic parameters for procedural gradients.
@@ -805,16 +805,17 @@ pub struct GradientStop {
 #[repr(C)]
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct GradientParams {
-    pub data: [f32; 4],
+    /// The parameters for the gradient, interpreted based on the gradient type.
+    pub params: [f32; 4],
 }
 
 /// Creates a new linear color stop.
 ///
-/// The percentage of the gradient, in the range 0.0 to 1.0.
-pub fn linear_color_stop(color: impl Into<Hsla>, percentage: f32) -> GradientStop {
+/// The position of the gradient, in the range 0.0 to 1.0.
+pub fn linear_color_stop(color: impl Into<Hsla>, position: f32) -> GradientStop {
     GradientStop {
         color: color.into(),
-        percentage,
+        position,
     }
 }
 
@@ -822,7 +823,7 @@ impl GradientStop {
     /// Returns a new color stop with the same color, but with a modified alpha value.
     pub fn opacity(&self, factor: f32) -> Self {
         Self {
-            percentage: self.percentage,
+            position: self.position,
             color: self.color.opacity(factor),
         }
     }

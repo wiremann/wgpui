@@ -72,7 +72,7 @@ impl color::GradientStop {
             format: wgpu::VertexFormat::Float32x4,
         },
         wgpu::VertexAttribute {
-            offset: std::mem::offset_of!(GradientStop, percentage) as wgpu::BufferAddress,
+            offset: std::mem::offset_of!(GradientStop, position) as wgpu::BufferAddress,
             shader_location: 1,
             format: wgpu::VertexFormat::Float32,
         },
