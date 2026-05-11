@@ -34,14 +34,14 @@ struct Edges {
 
 struct GradientStop {
     color: Hsla,
-    percentage: f32,
+    position: f32,
 }
 
 struct Background {
     tag: u32,
     color_space: u32,
     solid: Hsla,
-    gradient_angle_or_pattern_height: f32,
+    gradient_params: vec4<f32>,
     color0: GradientStop,
     color1: GradientStop,
     pad: u32,
@@ -198,7 +198,7 @@ fn gradient_color(background: Background, position: vec2<f32>, bounds: Bounds,
     solid_color: vec4<f32>, color0: vec4<f32>, color1: vec4<f32>) -> vec4<f32> {
     if background.tag == 0u || background.tag == 2u {
         return solid_color;
-    } else if background.tag == 1u {
+    } else if background.tag == 1u || background.tag == 3u {
         let angle = background.gradient_params.x;
         let radians = (angle % 360.0 - 90.0) * M_PI_F / 180.0;
         var direction = vec2<f32>(cos(radians), sin(radians));
