@@ -80,7 +80,7 @@ impl color::GradientStop {
 }
 
 impl color::Background {
-    const VERTEX_ATTRIBUTES: &'static [wgpu::VertexAttribute; 7] = &{
+    const VERTEX_ATTRIBUTES: &'static [wgpu::VertexAttribute; 10] = &{
         let linear_color_stop_vertex_attributes = map_attributes(
             GradientStop::VERTEX_ATTRIBUTES,
             4,
@@ -104,17 +104,31 @@ impl color::Background {
                 format: wgpu::VertexFormat::Uint32,
             },
             wgpu::VertexAttribute {
-                offset: std::mem::offset_of!(color::Background, gradient_angle_or_pattern_height)
-                    as wgpu::BufferAddress,
+                offset: std::mem::offset_of!(color::Background, param0) as wgpu::BufferAddress,
                 shader_location: 3,
+                format: wgpu::VertexFormat::Float32,
+            },
+            wgpu::VertexAttribute {
+                offset: std::mem::offset_of!(color::Background, param1) as wgpu::BufferAddress,
+                shader_location: 4,
+                format: wgpu::VertexFormat::Float32,
+            },
+            wgpu::VertexAttribute {
+                offset: std::mem::offset_of!(color::Background, param2) as wgpu::BufferAddress,
+                shader_location: 5,
+                format: wgpu::VertexFormat::Float32,
+            },
+            wgpu::VertexAttribute {
+                offset: std::mem::offset_of!(color::Background, param3) as wgpu::BufferAddress,
+                shader_location: 6,
                 format: wgpu::VertexFormat::Float32,
             },
             linear_color_stop_vertex_attributes[0],
             linear_color_stop_vertex_attributes[1],
             wgpu::VertexAttribute {
                 offset: std::mem::offset_of!(color::Background, pad) as wgpu::BufferAddress,
-                shader_location: 6,
-                format: wgpu::VertexFormat::Uint32,
+                shader_location: 9,
+                format: wgpu::VertexFormat::Uint8,
             },
         ]
     };

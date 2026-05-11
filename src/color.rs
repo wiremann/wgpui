@@ -691,10 +691,13 @@ pub struct Background {
     pub(crate) tag: BackgroundTag,
     pub(crate) color_space: ColorSpace,
     pub(crate) solid: Hsla,
-    pub(crate) gradient_angle_or_pattern_height: f32,
+    pub(crate) param0: f32,
+    pub(crate) param1: f32,
+    pub(crate) param2: f32,
+    pub(crate) param3: f32,
     pub(crate) colors: [GradientStop; 2],
     /// Padding for alignment for repr(C) layout.
-    pub(crate) pad: u32,
+    pub(crate) pad: u8,
 }
 
 impl std::fmt::Debug for Background {
@@ -705,15 +708,11 @@ impl std::fmt::Debug for Background {
                 write!(
                     f,
                     "LinearGradient({}, {:?}, {:?})",
-                    self.gradient_angle_or_pattern_height, self.colors[0], self.colors[1]
+                    self.param0, self.colors[0], self.colors[1]
                 )
             }
             BackgroundTag::PatternSlash => {
-                write!(
-                    f,
-                    "PatternSlash({:?}, {})",
-                    self.solid, self.gradient_angle_or_pattern_height
-                )
+                write!(f, "PatternSlash({:?}, {})", self.solid, self.param0)
             }
         }
     }
@@ -726,7 +725,10 @@ impl Default for Background {
             tag: BackgroundTag::Solid,
             solid: Hsla::default(),
             color_space: ColorSpace::default(),
-            gradient_angle_or_pattern_height: 0.0,
+            param0: 0.0,
+            param1: 0.0,
+            param2: 0.0,
+            param3: 0.0,
             colors: [GradientStop::default(), GradientStop::default()],
             pad: 0,
         }
@@ -742,7 +744,7 @@ pub fn pattern_slash(color: Hsla, width: f32, interval: f32) -> Background {
     Background {
         tag: BackgroundTag::PatternSlash,
         solid: color,
-        gradient_angle_or_pattern_height: height,
+        param0: height,
         ..Default::default()
     }
 }
@@ -769,7 +771,7 @@ pub fn linear_gradient(
 ) -> Background {
     Background {
         tag: BackgroundTag::LinearGradient,
-        gradient_angle_or_pattern_height: angle,
+        param0: angle,
         colors: [from.into(), to.into()],
         ..Default::default()
     }
