@@ -153,6 +153,10 @@ name = "text"
 path = "examples/learn/text.rs"
 
 [[example]]
+name = "emoji_display"
+path = "examples/learn/emoji_display.rs"
+
+[[example]]
 name = "wgpu_surface"
 path = "examples/learn/wgpu_surface.rs"
 
