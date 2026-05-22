@@ -11,6 +11,7 @@ mod surface;
 mod svg;
 mod text;
 mod uniform_list;
+mod virtual_list;
 mod wgpu_surface;
 
 pub use anchored::*;
@@ -26,4 +27,5 @@ pub use surface::*;
 pub use svg::*;
 pub use text::*;
 pub use uniform_list::*;
+pub use virtual_list::*;
 pub use wgpu_surface::*;
