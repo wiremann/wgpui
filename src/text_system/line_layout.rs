@@ -1,5 +1,5 @@
 use crate::{
-    Font, FontId, FontStyle, FontWeight, GlyphId, Pixels, PlatformTextSystem, Point, SharedString,
+    FontId, FontStyle, FontWeight, GlyphId, Pixels, PlatformTextSystem, Point, SharedString,
     Size, point, px,
 };
 use collections::FxHashMap;
