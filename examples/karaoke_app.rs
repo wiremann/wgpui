@@ -331,8 +331,8 @@ impl RenderOnce for TitleBar {
             .gap_1()
             .bg(linear_gradient(
                 180.0,
-                linear_color_stop(rgba(0x00000099), 0.0),
-                linear_color_stop(rgba(0x00000000), 1.0),
+                gradient_color_stop(rgba(0x00000099), 0.0),
+                gradient_color_stop(rgba(0x00000000), 1.0),
             ))
             .child(
                 div()
@@ -400,8 +400,8 @@ impl RenderOnce for ProgressBar {
             .gap_3()
             .bg(linear_gradient(
                 0.0,
-                linear_color_stop(rgba(0x00000099), 0.0),
-                linear_color_stop(rgba(0x00000000), 1.0),
+                gradient_color_stop(rgba(0x00000099), 0.0),
+                gradient_color_stop(rgba(0x00000000), 1.0),
             ))
             .child(
                 div()
@@ -480,8 +480,8 @@ impl RenderOnce for AnimatedBackground {
             .inset_0()
             .bg(linear_gradient(
                 145.0,
-                linear_color_stop(c1, 0.0),
-                linear_color_stop(c2, 1.0),
+                gradient_color_stop(c1, 0.0),
+                gradient_color_stop(c2, 1.0),
             ))
     }
 }
