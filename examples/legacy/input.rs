@@ -466,7 +466,7 @@ impl Element for TextElement {
                 TextRun {
                     len: marked_range.end - marked_range.start,
                     underline: Some(UnderlineStyle {
-                        color: Some(run.color),
+                        color: Some(run.color.to_hsla()),
                         thickness: px(1.0),
                         wavy: false,
                     }),
