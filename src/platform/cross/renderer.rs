@@ -4,9 +4,9 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 
 use crate::{
-    AtlasTextureId, AtlasTile, DevicePixels, GpuSpecs, GradientStop, MonochromeSprite, Pixels,
-    PlatformAtlas, PrimitiveBatch, Quad, ScaledPixels, Scene, TransformationMatrix, color,
-    geometry,
+    AtlasTextureId, AtlasTile, DevicePixels, GpuSpecs, GradientStop, LinearColorStop,
+    MonochromeSprite, Pixels, PlatformAtlas, PrimitiveBatch, Quad, ScaledPixels, Scene,
+    TransformationMatrix, color, geometry,
     platform::cross::{
         atlas::WgpuAtlas,
         render_context::{WgpuContext, ensure_buffer_size},
@@ -137,7 +137,7 @@ impl color::Background {
 impl color::TextColor {
     const VERTEX_ATTRIBUTES: &'static [wgpu::VertexAttribute; 7] = &{
         let linear_color_stop_vertex_attributes = map_attributes(
-            GradientStop::VERTEX_ATTRIBUTES,
+            LinearColorStop::VERTEX_ATTRIBUTES,
             4,
             std::mem::offset_of!(color::TextColor, colors) as wgpu::BufferAddress,
         );

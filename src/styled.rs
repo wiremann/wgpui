@@ -1,7 +1,7 @@
 use crate::{
     self as gpui, AbsoluteLength, AlignContent, AlignItems, BorderStyle, CursorStyle,
     DefiniteLength, Display, Fill, FlexDirection, FlexWrap, Font, FontFeatures, FontStyle,
-    FontWeight, GradientStop, GridPlacement, Hsla, JustifyContent, Length, SharedString,
+    FontWeight, GridPlacement, Hsla, JustifyContent, Length, LinearColorStop, SharedString,
     StrikethroughStyle, StyleRefinement, TextAlign, TextColor, TextOverflow, TextStyleRefinement,
     UnderlineStyle, WhiteSpace, px, relative, rems,
 };
@@ -417,16 +417,16 @@ pub trait Styled: Sized {
     /// # Example
     /// ```
     /// div().text_gradient(90.0,
-    ///     gradient_color_stop(red(), 0.0),
-    ///     gradient_color_stop(blue(), 1.0))
+    ///     linear_color_stop(red(), 0.0),
+    ///     linear_color_stop(blue(), 1.0))
     /// ```
     ///
     /// This value cascades to its child elements.
     fn text_gradient(
         mut self,
         angle: f32,
-        from: impl Into<GradientStop>,
-        to: impl Into<GradientStop>,
+        from: impl Into<LinearColorStop>,
+        to: impl Into<LinearColorStop>,
     ) -> Self {
         self.text_style()
             .get_or_insert_with(Default::default)
@@ -442,8 +442,8 @@ pub trait Styled: Sized {
     /// This value cascades to its child elements.
     fn text_gradient_horizontal(
         mut self,
-        from: impl Into<GradientStop>,
-        to: impl Into<GradientStop>,
+        from: impl Into<LinearColorStop>,
+        to: impl Into<LinearColorStop>,
     ) -> Self {
         self.text_gradient(90.0, from, to)
     }
@@ -454,8 +454,8 @@ pub trait Styled: Sized {
     /// This value cascades to its child elements.
     fn text_gradient_vertical(
         mut self,
-        from: impl Into<GradientStop>,
-        to: impl Into<GradientStop>,
+        from: impl Into<LinearColorStop>,
+        to: impl Into<LinearColorStop>,
     ) -> Self {
         self.text_gradient(180.0, from, to)
     }
