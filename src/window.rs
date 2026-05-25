@@ -3458,10 +3458,7 @@ impl Window {
             use std::sync::atomic::{AtomicU32, Ordering};
             static GLYPH_COUNT: AtomicU32 = AtomicU32::new(0);
             let count = GLYPH_COUNT.fetch_add(1, Ordering::Relaxed);
-            if count < 5 {
-                println!("[DEBUG] paint_glyph #{}: glyph_id={:?}, bounds={:?}, content_mask={:?}, text_color tag={:?}",
-                    count, glyph_id, bounds, content_mask, color.tag);
-            }
+
 
             self.next_frame.scene.insert_primitive(MonochromeSprite {
                 order: 0,

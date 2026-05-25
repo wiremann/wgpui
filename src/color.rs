@@ -1036,8 +1036,6 @@ pub fn text_gradient(
 ) -> TextColor {
     let from_stop = from.into();
     let to_stop = to.into();
-    println!("[DEBUG] text_gradient: angle={}, from=(color={:?}, pct={}), to=(color={:?}, pct={})",
-        angle, from_stop.color, from_stop.percentage, to_stop.color, to_stop.percentage);
     TextColor {
         tag: TextColorTag::LinearGradient,
         solid: Hsla::default(),
