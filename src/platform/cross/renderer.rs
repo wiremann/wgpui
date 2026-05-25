@@ -4,7 +4,7 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 
 use crate::{
-    AtlasTextureId, AtlasTile, DevicePixels, GpuSpecs, Hsla, LinearColorStop, MonochromeSprite,
+    AtlasTextureId, AtlasTile, DevicePixels, GpuSpecs, LinearColorStop, MonochromeSprite,
     PlatformAtlas, Pixels, PrimitiveBatch, Quad, ScaledPixels, Scene, TransformationMatrix,
     color, geometry,
     platform::cross::{
@@ -112,6 +112,47 @@ impl color::Background {
             linear_color_stop_vertex_attributes[1],
             wgpu::VertexAttribute {
                 offset: std::mem::offset_of!(color::Background, pad) as wgpu::BufferAddress,
+                shader_location: 6,
+                format: wgpu::VertexFormat::Uint32,
+            },
+        ]
+    };
+}
+
+impl color::TextColor {
+    const VERTEX_ATTRIBUTES: &'static [wgpu::VertexAttribute; 7] = &{
+        let linear_color_stop_vertex_attributes = map_attributes(
+            LinearColorStop::VERTEX_ATTRIBUTES,
+            4,
+            std::mem::offset_of!(color::TextColor, colors) as wgpu::BufferAddress,
+        );
+
+        [
+            wgpu::VertexAttribute {
+                offset: std::mem::offset_of!(color::TextColor, tag) as wgpu::BufferAddress,
+                shader_location: 0,
+                format: wgpu::VertexFormat::Uint32,
+            },
+            wgpu::VertexAttribute {
+                offset: std::mem::offset_of!(color::TextColor, color_space) as wgpu::BufferAddress,
+                shader_location: 1,
+                format: wgpu::VertexFormat::Uint32,
+            },
+            wgpu::VertexAttribute {
+                offset: std::mem::offset_of!(color::TextColor, solid) as wgpu::BufferAddress,
+                shader_location: 2,
+                format: wgpu::VertexFormat::Uint32,
+            },
+            wgpu::VertexAttribute {
+                offset: std::mem::offset_of!(color::TextColor, gradient_angle_or_reserved)
+                    as wgpu::BufferAddress,
+                shader_location: 3,
+                format: wgpu::VertexFormat::Float32,
+            },
+            linear_color_stop_vertex_attributes[0],
+            linear_color_stop_vertex_attributes[1],
+            wgpu::VertexAttribute {
+                offset: std::mem::offset_of!(color::TextColor, pad) as wgpu::BufferAddress,
                 shader_location: 6,
                 format: wgpu::VertexFormat::Uint32,
             },
@@ -518,7 +559,7 @@ impl TransformationMatrix {
 }
 
 impl MonochromeSprite {
-    const VERTEX_ATTRIBUTES: &'static [wgpu::VertexAttribute; 16] = &{
+    const VERTEX_ATTRIBUTES: &'static [wgpu::VertexAttribute; 21] = &{
         let bounds_vertex_attributes = map_attributes(
             Bounds::VERTEX_ATTRIBUTES,
             2,
@@ -531,10 +572,10 @@ impl MonochromeSprite {
             std::mem::offset_of!(MonochromeSprite, content_mask) as wgpu::BufferAddress,
         );
 
-        let color_vertex_attributes = map_attributes(
-            Hsla::VERTEX_ATTRIBUTES,
+        let text_color_vertex_attributes = map_attributes(
+            color::TextColor::VERTEX_ATTRIBUTES,
             6,
-            std::mem::offset_of!(MonochromeSprite, color) as wgpu::BufferAddress,
+            std::mem::offset_of!(MonochromeSprite, text_color) as wgpu::BufferAddress,
         );
 
         let tile_vertex_attributes = map_attributes(
@@ -564,8 +605,13 @@ impl MonochromeSprite {
             bounds_vertex_attributes[1],
             content_mask_vertex_attributes[0],
             content_mask_vertex_attributes[1],
-            color_vertex_attributes[0],
-            color_vertex_attributes[1],
+            text_color_vertex_attributes[0],
+            text_color_vertex_attributes[1],
+            text_color_vertex_attributes[2],
+            text_color_vertex_attributes[3],
+            text_color_vertex_attributes[4],
+            text_color_vertex_attributes[5],
+            text_color_vertex_attributes[6],
             tile_vertex_attributes[0],
             tile_vertex_attributes[1],
             tile_vertex_attributes[2],

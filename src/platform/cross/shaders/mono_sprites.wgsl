@@ -16,6 +16,21 @@ struct Hsla {
     a: f32,
 }
 
+struct LinearColorStop {
+    color: Hsla,
+    percentage: f32,
+}
+
+struct TextColor {
+    tag: u32,
+    color_space: u32,
+    solid: Hsla,
+    gradient_angle_or_reserved: f32,
+    color0: LinearColorStop,
+    color1: LinearColorStop,
+    pad: u32,
+}
+
 struct AtlasTextureId {
     index: u32,
     kind: u32,
@@ -43,7 +58,7 @@ struct MonochromeSprite {
     pad: u32,
     bounds: Bounds,
     content_mask: Bounds,
-    color: Hsla,
+    text_color: TextColor,
     tile: AtlasTile,
     transformation: TransformationMatrix,
 }
@@ -85,6 +100,54 @@ fn hsla_to_rgba(hsla: Hsla) -> vec4<f32> {
     }
 
     return vec4<f32>(color, a);
+}
+
+// Compute the gradient color for text at a given position
+// Adapted from the gradient_color function in quads.wgsl
+fn text_gradient_color(text_color: TextColor, position: vec2<f32>, bounds: Bounds) -> vec4<f32> {
+    // Solid color (tag == 0)
+    if (text_color.tag == 0u) {
+        return hsla_to_rgba(text_color.solid);
+    }
+
+    // Linear gradient (tag == 1)
+    let angle = text_color.gradient_angle_or_reserved;
+    let radians = (angle % 360.0 - 90.0) * 0.01745329251; // PI / 180 = 0.01745329251
+    var direction = vec2<f32>(cos(radians), sin(radians));
+    let stop0_percentage = text_color.color0.percentage;
+    let stop1_percentage = text_color.color1.percentage;
+
+    // Expand the short side to be the same as the long side
+    if (bounds.size.x > bounds.size.y) {
+        direction.y *= bounds.size.y / bounds.size.x;
+    } else {
+        direction.x *= bounds.size.x / bounds.size.y;
+    }
+
+    // Get the t value for the linear gradient with the color stop percentages
+    let half_size = bounds.size / 2.0;
+    let center = bounds.origin + half_size;
+    let center_to_point = position - center;
+    var t = dot(center_to_point, direction) / length(direction);
+
+    // Check the direction to determine the use of x or y
+    if (abs(direction.x) > abs(direction.y)) {
+        t = (t + half_size.x) / bounds.size.x;
+    } else {
+        t = (t + half_size.y) / bounds.size.y;
+    }
+
+    // Adjust t based on the stop percentages
+    t = (t - stop0_percentage) / (stop1_percentage - stop0_percentage);
+    t = clamp(t, 0.0, 1.0);
+
+    // Convert colors from HSLA to RGBA
+    let color0_rgba = hsla_to_rgba(text_color.color0.color);
+    let color1_rgba = hsla_to_rgba(text_color.color1.color);
+
+    // For now, only support sRGB color space (color_space == 0)
+    // OKLab support can be added later if needed
+    return mix(color0_rgba, color1_rgba, t);
 }
 
 fn distance_from_clip_rect_impl(position: vec2<f32>, clip_bounds: Bounds) -> vec4<f32> {
@@ -186,7 +249,11 @@ fn vs_mono_sprite(@builtin(vertex_index) vertex_id: u32, @builtin(instance_index
     out.position = to_device_position_transformed(unit_vertex, sprite.bounds, sprite.transformation);
 
     out.tile_position = to_tile_position(unit_vertex, sprite.tile);
-    out.color = hsla_to_rgba(sprite.color);
+
+    // Compute pixel position for gradient calculation
+    let pixel_position = unit_vertex * vec2<f32>(sprite.bounds.size) + sprite.bounds.origin;
+    out.color = text_gradient_color(sprite.text_color, pixel_position, sprite.bounds);
+
     out.clip_distances = distance_from_clip_rect_transformed(unit_vertex, sprite.bounds, sprite.content_mask, sprite.transformation);
     return out;
 }

@@ -1,9 +1,9 @@
 use crate::{
     self as gpui, AbsoluteLength, AlignContent, AlignItems, BorderStyle, CursorStyle,
     DefiniteLength, Display, Fill, FlexDirection, FlexWrap, Font, FontFeatures, FontStyle,
-    FontWeight, GridPlacement, Hsla, JustifyContent, Length, SharedString, StrikethroughStyle,
-    StyleRefinement, TextAlign, TextOverflow, TextStyleRefinement, UnderlineStyle, WhiteSpace, px,
-    relative, rems,
+    FontWeight, GridPlacement, Hsla, JustifyContent, Length, LinearColorStop, SharedString,
+    StrikethroughStyle, StyleRefinement, TextAlign, TextColor, TextOverflow, TextStyleRefinement,
+    UnderlineStyle, WhiteSpace, px, relative, rems,
 };
 pub use gpui_macros::{
     border_style_methods, box_shadow_style_methods, cursor_style_methods, margin_style_methods,
@@ -404,9 +404,60 @@ pub trait Styled: Sized {
     /// Sets the text color of this element.
     ///
     /// This value cascades to its child elements.
-    fn text_color(mut self, color: impl Into<Hsla>) -> Self {
+    fn text_color(mut self, color: impl Into<TextColor>) -> Self {
         self.text_style().get_or_insert_with(Default::default).color = Some(color.into());
         self
+    }
+
+    /// Sets a linear gradient for the text color.
+    ///
+    /// The angle is in degrees where 0° is top, 90° is right, 180° is bottom, 270° is left.
+    /// This matches CSS linear-gradient convention.
+    ///
+    /// # Example
+    /// ```
+    /// div().text_gradient(90.0,
+    ///     linear_color_stop(red(), 0.0),
+    ///     linear_color_stop(blue(), 1.0))
+    /// ```
+    ///
+    /// This value cascades to its child elements.
+    fn text_gradient(
+        mut self,
+        angle: f32,
+        from: impl Into<LinearColorStop>,
+        to: impl Into<LinearColorStop>,
+    ) -> Self {
+        self.text_style()
+            .get_or_insert_with(Default::default)
+            .color = Some(crate::text_gradient(angle, from, to));
+        self
+    }
+
+    /// Sets a horizontal text gradient from left to right.
+    /// Equivalent to text_gradient(90.0, from, to).
+    ///
+    /// This is useful for the common "progress bar" text effect.
+    ///
+    /// This value cascades to its child elements.
+    fn text_gradient_horizontal(
+        mut self,
+        from: impl Into<LinearColorStop>,
+        to: impl Into<LinearColorStop>,
+    ) -> Self {
+        self.text_gradient(90.0, from, to)
+    }
+
+    /// Sets a vertical text gradient from top to bottom.
+    /// Equivalent to text_gradient(180.0, from, to).
+    ///
+    /// This value cascades to its child elements.
+    fn text_gradient_vertical(
+        mut self,
+        from: impl Into<LinearColorStop>,
+        to: impl Into<LinearColorStop>,
+    ) -> Self {
+        self.text_gradient(180.0, from, to)
     }
 
     /// Sets the font weight of this element

@@ -2009,7 +2009,7 @@ impl Interactivity {
 
             window.with_text_style(
                 Some(crate::TextStyleRefinement {
-                    color: Some(crate::red()),
+                    color: Some(crate::red().into()),
                     line_height: Some(FONT_SIZE.into()),
                     background_color: Some(crate::white()),
                     ..Default::default()

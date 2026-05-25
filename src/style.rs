@@ -8,8 +8,8 @@ use crate::{
     AbsoluteLength, App, Background, BackgroundTag, BorderStyle, Bounds, ContentMask, Corners,
     CornersRefinement, CursorStyle, DefiniteLength, DevicePixels, Edges, EdgesRefinement, Font,
     FontFallbacks, FontFeatures, FontStyle, FontWeight, GridLocation, Hsla, Length, Pixels, Point,
-    PointRefinement, Rgba, SharedString, Size, SizeRefinement, Styled, TextRun, Window, black, phi,
-    point, quad, rems, size,
+    PointRefinement, Rgba, SharedString, Size, SizeRefinement, Styled, TextColor, TextRun, Window,
+    black, phi, point, quad, rems, size, solid_text_color,
 };
 use collections::HashSet;
 use refineable::Refineable;
@@ -353,8 +353,8 @@ pub enum TextAlign {
 #[derive(Refineable, Clone, Debug, PartialEq)]
 #[refineable(Debug, PartialEq, Serialize, Deserialize, JsonSchema)]
 pub struct TextStyle {
-    /// The color of the text
-    pub color: Hsla,
+    /// The color of the text (can be solid or gradient)
+    pub color: TextColor,
 
     /// The font family to use
     pub font_family: SharedString,
@@ -402,7 +402,7 @@ pub struct TextStyle {
 impl Default for TextStyle {
     fn default() -> Self {
         TextStyle {
-            color: black(),
+            color: solid_text_color(black()),
             // todo(linux) make this configurable or choose better default
             font_family: ".SystemUIFont".into(),
             font_features: FontFeatures::default(),
@@ -434,11 +434,11 @@ impl TextStyle {
         }
 
         if let Some(color) = style.color {
-            self.color = self.color.blend(color);
+            self.color = color;
         }
 
         if let Some(factor) = style.fade_out {
-            self.color.fade_out(factor);
+            self.color = self.color.with_opacity(1.0 - factor);
         }
 
         if let Some(background_color) = style.background_color {
@@ -483,7 +483,7 @@ impl TextStyle {
                 weight: self.font_weight,
                 style: self.font_style,
             },
-            color: self.color,
+            color: self.color.to_hsla(),
             background_color: self.background_color,
             underline: self.underline,
             strikethrough: self.strikethrough,
@@ -495,8 +495,8 @@ impl TextStyle {
 /// for a single font, uniformly sized and spaced text.
 #[derive(Copy, Clone, Debug, Default, PartialEq)]
 pub struct HighlightStyle {
-    /// The color of the text
-    pub color: Option<Hsla>,
+    /// The color of the text (can be solid or gradient)
+    pub color: Option<TextColor>,
 
     /// The font weight, e.g. bold
     pub font_weight: Option<FontWeight>,
@@ -875,7 +875,7 @@ impl HighlightStyle {
     /// Create a highlight style with just a color
     pub fn color(color: Hsla) -> Self {
         Self {
-            color: Some(color),
+            color: Some(color.into()),
             ..Default::default()
         }
     }
@@ -887,8 +887,8 @@ impl HighlightStyle {
             color: other
                 .color
                 .map(|other_color| {
-                    if let Some(color) = self.color {
-                        color.blend(other_color)
+                    if let Some(_color) = self.color {
+                        other_color
                     } else {
                         other_color
                     }
@@ -914,7 +914,7 @@ impl HighlightStyle {
 impl From<Hsla> for HighlightStyle {
     fn from(color: Hsla) -> Self {
         Self {
-            color: Some(color),
+            color: Some(color.into()),
             ..Default::default()
         }
     }

@@ -127,7 +127,7 @@ impl Element for Svg {
                         .unwrap_or_default();
 
                     window
-                        .paint_svg(bounds, path.clone(), None, transformation, color, cx)
+                        .paint_svg(bounds, path.clone(), None, transformation, color.to_hsla(), cx)
                         .log_err();
                 } else if let Some((path, color)) =
                     self.external_path.as_ref().zip(style.text.color)
@@ -153,7 +153,7 @@ impl Element for Svg {
                             path.clone(),
                             Some(&bytes),
                             transformation,
-                            color,
+                            color.to_hsla(),
                             cx,
                         )
                         .log_err();

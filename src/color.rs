@@ -665,7 +665,7 @@ pub(crate) enum BackgroundTag {
 /// References:
 /// - <https://developer.mozilla.org/en-US/docs/Web/CSS/color-interpolation-method>
 /// - <https://www.w3.org/TR/css-color-4/#typedef-color-space>
-#[derive(Debug, Clone, Copy, PartialEq, Default, Serialize, Deserialize, JsonSchema)]
+#[derive(Debug, Clone, Copy, PartialEq, Hash, Default, Serialize, Deserialize, JsonSchema)]
 #[repr(C)]
 pub enum ColorSpace {
     #[default]
@@ -807,6 +807,13 @@ impl LinearColorStop {
     }
 }
 
+impl std::hash::Hash for LinearColorStop {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        self.color.hash(state);
+        state.write_u32(u32::from_be_bytes(self.percentage.to_be_bytes()));
+    }
+}
+
 impl Background {
     /// Use specified color space for color interpolation.
     ///
@@ -853,6 +860,189 @@ impl From<Rgba> for Background {
             solid: Hsla::from(value),
             ..Default::default()
         }
+    }
+}
+
+/// The tag for a text color, determining which rendering path to use.
+#[derive(Debug, Clone, Copy, PartialEq, Hash, Serialize, Deserialize, JsonSchema)]
+#[repr(C)]
+pub enum TextColorTag {
+    /// A solid color.
+    Solid = 0,
+    /// A linear gradient.
+    LinearGradient = 1,
+}
+
+/// A text color, which can be either a solid color or a linear gradient.
+#[derive(Clone, Copy, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[repr(C)]
+pub struct TextColor {
+    pub(crate) tag: TextColorTag,
+    pub(crate) color_space: ColorSpace,
+    pub(crate) solid: Hsla,
+    pub(crate) gradient_angle_or_reserved: f32,
+    pub(crate) colors: [LinearColorStop; 2],
+    /// Padding for alignment for repr(C) layout.
+    pub(crate) pad: u32,
+}
+
+impl std::fmt::Debug for TextColor {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        match self.tag {
+            TextColorTag::Solid => write!(f, "Solid({:?})", self.solid),
+            TextColorTag::LinearGradient => {
+                write!(
+                    f,
+                    "LinearGradient({}, {:?}, {:?})",
+                    self.gradient_angle_or_reserved, self.colors[0], self.colors[1]
+                )
+            }
+        }
+    }
+}
+
+impl Eq for TextColor {}
+
+impl std::hash::Hash for TextColor {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        self.tag.hash(state);
+        self.color_space.hash(state);
+        self.solid.hash(state);
+        state.write_u32(u32::from_be_bytes(self.gradient_angle_or_reserved.to_be_bytes()));
+        self.colors[0].hash(state);
+        self.colors[1].hash(state);
+        self.pad.hash(state);
+    }
+}
+
+impl Default for TextColor {
+    fn default() -> Self {
+        Self {
+            tag: TextColorTag::Solid,
+            solid: Hsla::default(),
+            color_space: ColorSpace::default(),
+            gradient_angle_or_reserved: 0.0,
+            colors: [LinearColorStop::default(), LinearColorStop::default()],
+            pad: 0,
+        }
+    }
+}
+
+/// Creates a solid text color.
+pub fn solid_text_color(color: impl Into<Hsla>) -> TextColor {
+    TextColor {
+        tag: TextColorTag::Solid,
+        solid: color.into(),
+        color_space: ColorSpace::default(),
+        gradient_angle_or_reserved: 0.0,
+        colors: [LinearColorStop::default(), LinearColorStop::default()],
+        pad: 0,
+    }
+}
+
+/// Creates a linear gradient text color.
+///
+/// The gradient line's angle of direction. A value of `0.` is equivalent to top; increasing values rotate clockwise from there.
+///
+/// The `angle` is in degrees value in the range 0.0 to 360.0.
+///
+/// <https://developer.mozilla.org/en-US/docs/Web/CSS/gradient/linear-gradient>
+pub fn text_gradient(
+    angle: f32,
+    from: impl Into<LinearColorStop>,
+    to: impl Into<LinearColorStop>,
+) -> TextColor {
+    TextColor {
+        tag: TextColorTag::LinearGradient,
+        solid: Hsla::default(),
+        color_space: ColorSpace::default(),
+        gradient_angle_or_reserved: angle,
+        colors: [from.into(), to.into()],
+        pad: 0,
+    }
+}
+
+/// Creates a horizontal progress-bar style gradient for text.
+///
+/// The `progress` value should be between 0.0 and 1.0.
+/// Text before the progress point uses `active_color`, after uses `inactive_color`.
+///
+/// # Example
+/// ```
+/// let gradient = text_progress_gradient(0.5, blue(), gray());
+/// div().text_color(gradient).child("Loading...")
+/// ```
+pub fn text_progress_gradient(
+    progress: f32,
+    active_color: impl Into<Hsla>,
+    inactive_color: impl Into<Hsla>,
+) -> TextColor {
+    let progress = progress.clamp(0.0, 1.0);
+    text_gradient(
+        90.0, // Horizontal
+        linear_color_stop(active_color, 0.0),
+        linear_color_stop(inactive_color, progress),
+    )
+}
+
+impl TextColor {
+    /// Use specified color space for color interpolation.
+    ///
+    /// <https://developer.mozilla.org/en-US/docs/Web/CSS/color-interpolation-method>
+    pub fn color_space(mut self, color_space: ColorSpace) -> Self {
+        self.color_space = color_space;
+        self
+    }
+
+    /// Returns a new text color with the given opacity multiplied with the existing opacity.
+    pub fn with_opacity(&self, factor: f32) -> Self {
+        let mut result = *self;
+        result.solid = result.solid.opacity(factor);
+        result.colors = [
+            self.colors[0].opacity(factor),
+            self.colors[1].opacity(factor),
+        ];
+        result
+    }
+
+    /// Returns whether the text color is transparent.
+    pub fn is_transparent(&self) -> bool {
+        match self.tag {
+            TextColorTag::Solid => self.solid.is_transparent(),
+            TextColorTag::LinearGradient => self.colors.iter().all(|c| c.color.is_transparent()),
+        }
+    }
+
+    /// Returns whether the text color is a solid color.
+    pub fn is_solid(&self) -> bool {
+        matches!(self.tag, TextColorTag::Solid)
+    }
+
+    /// Returns whether the text color is a gradient.
+    pub fn is_gradient(&self) -> bool {
+        matches!(self.tag, TextColorTag::LinearGradient)
+    }
+
+    /// Returns an Hsla color from this text color.
+    /// For solid colors, returns the solid color.
+    /// For gradients, returns the first color stop.
+    pub fn to_hsla(&self) -> Hsla {
+        match self.tag {
+            TextColorTag::Solid => self.solid,
+            TextColorTag::LinearGradient => self.colors[0].color,
+        }
+    }
+}
+
+impl From<Hsla> for TextColor {
+    fn from(value: Hsla) -> Self {
+        solid_text_color(value)
+    }
+}
+
+impl From<Rgba> for TextColor {
+    fn from(value: Rgba) -> Self {
+        solid_text_color(Hsla::from(value))
     }
 }
 

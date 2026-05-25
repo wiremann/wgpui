@@ -1,7 +1,7 @@
 use crate::{
     App, Bounds, Half, Hsla, LineLayout, Pixels, Point, Result, SharedString, StrikethroughStyle,
-    TextAlign, UnderlineStyle, Window, WrapBoundary, WrappedLineLayout, black, fill, point, px,
-    size,
+    TextAlign, TextColor, UnderlineStyle, Window, WrapBoundary, WrappedLineLayout, black, fill,
+    point, px, size, solid_text_color,
 };
 use derive_more::{Deref, DerefMut};
 use smallvec::SmallVec;
@@ -13,8 +13,8 @@ pub struct DecorationRun {
     /// The length of the run in utf-8 bytes.
     pub len: u32,
 
-    /// The color for this run
-    pub color: Hsla,
+    /// The color for this run (can be solid or gradient)
+    pub color: TextColor,
 
     /// The background color for this run
     pub background_color: Option<Hsla>,
@@ -209,7 +209,7 @@ fn paint_line(
         let mut decoration_runs = decoration_runs.iter();
         let mut wraps = wrap_boundaries.iter().peekable();
         let mut run_end = 0;
-        let mut color = black();
+        let mut color = solid_text_color(black());
         let mut current_underline: Option<(Point<Pixels>, UnderlineStyle)> = None;
         let mut current_strikethrough: Option<(Point<Pixels>, StrikethroughStyle)> = None;
         let text_system = cx.text_system().clone();
@@ -304,7 +304,7 @@ fn paint_line(
                                     glyph_origin.y + baseline_offset.y + (layout.descent * 0.618),
                                 ),
                                 UnderlineStyle {
-                                    color: Some(run_underline.color.unwrap_or(style_run.color)),
+                                    color: Some(run_underline.color.unwrap_or(style_run.color.to_hsla())),
                                     thickness: run_underline.thickness,
                                     wavy: run_underline.wavy,
                                 },
@@ -323,7 +323,7 @@ fn paint_line(
                                         + (((layout.ascent * 0.5) + baseline_offset.y) * 0.5),
                                 ),
                                 StrikethroughStyle {
-                                    color: Some(run_strikethrough.color.unwrap_or(style_run.color)),
+                                    color: Some(run_strikethrough.color.unwrap_or(style_run.color.to_hsla())),
                                     thickness: run_strikethrough.thickness,
                                 },
                             ));

@@ -372,7 +372,7 @@ impl WindowTextSystem {
         let mut decoration_runs = SmallVec::<[DecorationRun; 32]>::new();
         for run in runs {
             if let Some(last_run) = decoration_runs.last_mut()
-                && last_run.color == run.color
+                && last_run.color == run.color.into()
                 && last_run.underline == run.underline
                 && last_run.strikethrough == run.strikethrough
                 && last_run.background_color == run.background_color
@@ -382,7 +382,7 @@ impl WindowTextSystem {
             }
             decoration_runs.push(DecorationRun {
                 len: run.len as u32,
-                color: run.color,
+                color: run.color.into(),
                 background_color: run.background_color,
                 underline: run.underline,
                 strikethrough: run.strikethrough,
@@ -430,7 +430,7 @@ impl WindowTextSystem {
                 let run_len_within_line = cmp::min(line_end - run_start, run.len);
 
                 let decoration_changed = if let Some(last_run) = decoration_runs.last_mut()
-                    && last_run.color == run.color
+                    && last_run.color == run.color.into()
                     && last_run.underline == run.underline
                     && last_run.strikethrough == run.strikethrough
                     && last_run.background_color == run.background_color
@@ -440,7 +440,7 @@ impl WindowTextSystem {
                 } else {
                     decoration_runs.push(DecorationRun {
                         len: run_len_within_line as u32,
-                        color: run.color,
+                        color: run.color.into(),
                         background_color: run.background_color,
                         underline: run.underline,
                         strikethrough: run.strikethrough,

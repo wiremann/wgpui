@@ -14,10 +14,10 @@ use crate::{
     RenderImageParams, RenderSvgParams, Replay, ResizeEdge, SMOOTH_SVG_SCALE_FACTOR,
     SUBPIXEL_VARIANTS_X, SUBPIXEL_VARIANTS_Y, ScaledPixels, Scene, Shadow, SharedString, Size,
     StrikethroughStyle, Style, SubscriberSet, Subscription, SystemWindowTab,
-    SystemWindowTabController, TabStopMap, TaffyLayoutEngine, Task, TextStyle, TextStyleRefinement,
-    TransformationMatrix, Underline, UnderlineStyle, WindowAppearance, WindowBackgroundAppearance,
-    WindowBounds, WindowControls, WindowDecorations, WindowOptions, WindowParams, WindowTextSystem,
-    point, prelude::*, px, rems, size, transparent_black,
+    SystemWindowTabController, TabStopMap, TaffyLayoutEngine, Task, TextColor, TextStyle,
+    TextStyleRefinement, TransformationMatrix, Underline, UnderlineStyle, WindowAppearance,
+    WindowBackgroundAppearance, WindowBounds, WindowControls, WindowDecorations, WindowOptions,
+    WindowParams, WindowTextSystem, point, prelude::*, px, rems, size, transparent_black,
 };
 use anyhow::{Context as _, Result, anyhow};
 use collections::{FxHashMap, FxHashSet};
@@ -3355,7 +3355,7 @@ impl Window {
         font_id: FontId,
         glyph_id: GlyphId,
         font_size: Pixels,
-        color: Hsla,
+        color: TextColor,
     ) -> Result<()> {
         self.invalidator.debug_assert_paint();
 
@@ -3395,7 +3395,7 @@ impl Window {
                 pad: 0,
                 bounds,
                 content_mask,
-                color: color.opacity(element_opacity),
+                text_color: color.with_opacity(element_opacity),
                 tile,
                 transformation: TransformationMatrix::unit(),
             });
@@ -3520,7 +3520,7 @@ impl Window {
                 .map_origin(|origin| origin.round())
                 .map_size(|size| size.ceil()),
             content_mask,
-            color: color.opacity(element_opacity),
+            text_color: TextColor::from(color).with_opacity(element_opacity),
             tile,
             transformation,
         });

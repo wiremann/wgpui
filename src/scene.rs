@@ -3,7 +3,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::{
     AtlasTextureId, AtlasTile, Background, Bounds, ContentMask, Corners, Edges, Hsla, Pixels,
-    Point, Radians, ScaledPixels, Size, bounds_tree::BoundsTree,
+    Point, Radians, ScaledPixels, Size, TextColor, bounds_tree::BoundsTree,
     platform::cross::surface_registry::SurfaceId, point,
 };
 use std::{
@@ -593,7 +593,7 @@ pub(crate) struct MonochromeSprite {
     pub pad: u32, // align to 8 bytes
     pub bounds: Bounds<ScaledPixels>,
     pub content_mask: ContentMask<ScaledPixels>,
-    pub color: Hsla,
+    pub text_color: TextColor,
     pub tile: AtlasTile,
     pub transformation: TransformationMatrix,
 }
