@@ -294,24 +294,91 @@ impl Platform for CrossPlatform {
 
     fn prompt_for_paths(
         &self,
-        _options: crate::PathPromptOptions,
+        options: crate::PathPromptOptions,
     ) -> futures::channel::oneshot::Receiver<anyhow::Result<Option<Vec<std::path::PathBuf>>>> {
         let (sender, receiver) = futures::channel::oneshot::channel();
-        let _ = sender.send(Ok(None));
+
+        enum PickType {
+            File,
+            Folder,
+        }
+        // rfd does not support picking either/both files and directories. The gpui api is not clear on how various platforms should handle the options.
+        let pick_type = match (options.files, options.directories) {
+            (true, false) => PickType::File,
+            (false, true) => PickType::Folder,
+            _ => {
+                let _ = sender.send(Err(anyhow::anyhow!("CrossPlatform::prompt_for_paths must be configured to select either files or directories. \
+                          Platform does not support neither nor both being configured (must choose exactly one of them).")));
+                return receiver;
+            }
+        };
+
+        let mut dialog = rfd::AsyncFileDialog::new();
+        // Diverging from gpui implementation, where the prompt is the button. rfd doesnt support this and the gpui doesnt support an explicit title (unlike prompt_for_new_path).
+        // So we hijack the prompt to use it as the title.
+        dialog = match options.prompt {
+            Some(prompt) => dialog.set_title(prompt),
+            None => dialog.set_title(match pick_type {
+                PickType::File => "Open File",
+                PickType::Folder => "Open Folder",
+            }),
+        };
+
+        let task = self.foreground_executor().spawn(async move {
+            let selection = match options.multiple {
+                false => {
+                    let file_handle = match pick_type {
+                        PickType::File => dialog.pick_file().await,
+                        PickType::Folder => dialog.pick_folder().await,
+                    };
+                    file_handle.map(|handle| vec![handle])
+                }
+                true => match pick_type {
+                    PickType::File => dialog.pick_files().await,
+                    PickType::Folder => dialog.pick_folders().await,
+                },
+            };
+            let _ = match selection {
+                None => sender.send(Ok(None)),
+                Some(handles) => {
+                    let paths = handles
+                        .into_iter()
+                        .map(|handle| handle.path().to_owned())
+                        .collect();
+                    sender.send(Ok(Some(paths)))
+                }
+            };
+        });
+        task.detach();
+
         receiver
     }
 
     fn prompt_for_new_path(
         &self,
-        _directory: &std::path::Path,
-        _suggested_name: Option<&str>,
+        directory: &std::path::Path,
+        suggested_name: Option<&str>,
     ) -> futures::channel::oneshot::Receiver<anyhow::Result<Option<std::path::PathBuf>>> {
         let (sender, receiver) = futures::channel::oneshot::channel();
-        let _ = sender.send(Ok(None));
+
+        let mut dialog = rfd::AsyncFileDialog::new();
+        dialog = dialog.set_title("Save File");
+        dialog = dialog.set_directory(directory);
+        if let Some(file_name) = suggested_name {
+            dialog = dialog.set_file_name(file_name);
+        }
+        let task = self.foreground_executor().spawn(async move {
+            let selection = dialog.save_file().await;
+            let path = selection.map(|handle| handle.path().to_owned());
+            let _ = sender.send(Ok(path));
+        });
+        task.detach();
+
         receiver
     }
 
     fn can_select_mixed_files_and_dirs(&self) -> bool {
+        // rfd does not support the capability for a user to select both files and folders in the same AsyncFileDialog.
         false
     }
 
