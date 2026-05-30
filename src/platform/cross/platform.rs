@@ -157,34 +157,55 @@ impl Platform for CrossPlatform {
     }
 
     fn restart(&self, _binary_path: Option<std::path::PathBuf>) {
-        log::warn!("restart is not yet implemented on this platform");
+        log::warn!(
+            "restart is not yet implemented on this platform, https://github.com/Far-Beyond-Pulsar/WGPUI/issues/29"
+        );
     }
 
-    fn activate(&self, _ignoring_other_apps: bool) {}
+    fn activate(&self, _ignoring_other_apps: bool) {
+        log::warn!(
+            "activate is not yet implemented on this platform, https://github.com/Far-Beyond-Pulsar/WGPUI/issues/29"
+        );
+    }
 
     fn hide(&self) {
-        log::warn!("hide is not yet implemented on this platform");
+        log::warn!(
+            "hide is not yet implemented on this platform, https://github.com/Far-Beyond-Pulsar/WGPUI/issues/29"
+        );
     }
 
     fn hide_other_apps(&self) {
-        log::warn!("hide_other_apps is not yet implemented on this platform");
+        log::warn!(
+            "hide_other_apps is not yet implemented on this platform, https://github.com/Far-Beyond-Pulsar/WGPUI/issues/29"
+        );
     }
 
     fn unhide_other_apps(&self) {
-        log::warn!("unhide_other_apps is not yet implemented on this platform");
+        log::warn!(
+            "unhide_other_apps is not yet implemented on this platform, https://github.com/Far-Beyond-Pulsar/WGPUI/issues/29"
+        );
     }
 
     fn displays(&self) -> Vec<Rc<dyn crate::PlatformDisplay>> {
+        log::warn!(
+            "multiple display support is not yet implemented on this platform, https://github.com/Far-Beyond-Pulsar/WGPUI/issues/28"
+        );
         // TODO(mdeand): Add support for multiple displays.
         vec![]
     }
 
     fn primary_display(&self) -> Option<Rc<dyn crate::PlatformDisplay>> {
+        log::warn!(
+            "multiple display support is not yet implemented on this platform, https://github.com/Far-Beyond-Pulsar/WGPUI/issues/28"
+        );
         // TODO(mdeand): Add support for multiple displays and primary display.
         None
     }
 
     fn active_window(&self) -> Option<crate::AnyWindowHandle> {
+        log::warn!(
+            "multiple display support is not yet implemented on this platform, https://github.com/Far-Beyond-Pulsar/WGPUI/issues/28"
+        );
         // TODO(mdeand): Add support for tracking active window.
         None
     }
@@ -278,8 +299,10 @@ impl Platform for CrossPlatform {
         crate::WindowAppearance::default()
     }
 
-    fn open_url(&self, _url: &str) {
-        log::warn!("open_url is not yet implemented on this platform");
+    fn open_url(&self, url: &str) {
+        if let Err(err) = ::open::that_detached(url) {
+            log::error!("failed to open_url {url:?}: {err:?}");
+        }
     }
 
     fn on_open_urls(&self, callback: Box<dyn FnMut(Vec<String>)>) {
@@ -294,33 +317,108 @@ impl Platform for CrossPlatform {
 
     fn prompt_for_paths(
         &self,
-        _options: crate::PathPromptOptions,
+        options: crate::PathPromptOptions,
     ) -> futures::channel::oneshot::Receiver<anyhow::Result<Option<Vec<std::path::PathBuf>>>> {
         let (sender, receiver) = futures::channel::oneshot::channel();
-        let _ = sender.send(Ok(None));
+
+        enum PickType {
+            File,
+            Folder,
+        }
+        // rfd does not support picking either/both files and directories. The gpui api is not clear on how various platforms should handle the options.
+        let pick_type = match (options.files, options.directories) {
+            (true, false) => PickType::File,
+            (false, true) => PickType::Folder,
+            _ => {
+                let _ = sender.send(Err(anyhow::anyhow!("CrossPlatform::prompt_for_paths must be configured to select either files or directories. \
+                          Platform does not support neither nor both being configured (must choose exactly one of them).")));
+                return receiver;
+            }
+        };
+
+        let mut dialog = rfd::AsyncFileDialog::new();
+        // Diverging from gpui implementation, where the prompt is the button. rfd doesnt support this and the gpui doesnt support an explicit title (unlike prompt_for_new_path).
+        // So we hijack the prompt to use it as the title.
+        dialog = match options.prompt {
+            Some(prompt) => dialog.set_title(prompt),
+            None => dialog.set_title(match pick_type {
+                PickType::File => "Open File",
+                PickType::Folder => "Open Folder",
+            }),
+        };
+
+        let task = self.foreground_executor().spawn(async move {
+            let selection = match options.multiple {
+                false => {
+                    let file_handle = match pick_type {
+                        PickType::File => dialog.pick_file().await,
+                        PickType::Folder => dialog.pick_folder().await,
+                    };
+                    file_handle.map(|handle| vec![handle])
+                }
+                true => match pick_type {
+                    PickType::File => dialog.pick_files().await,
+                    PickType::Folder => dialog.pick_folders().await,
+                },
+            };
+            let _ = match selection {
+                None => sender.send(Ok(None)),
+                Some(handles) => {
+                    let paths = handles
+                        .into_iter()
+                        .map(|handle| handle.path().to_owned())
+                        .collect();
+                    sender.send(Ok(Some(paths)))
+                }
+            };
+        });
+        task.detach();
+
         receiver
     }
 
     fn prompt_for_new_path(
         &self,
-        _directory: &std::path::Path,
-        _suggested_name: Option<&str>,
+        directory: &std::path::Path,
+        suggested_name: Option<&str>,
     ) -> futures::channel::oneshot::Receiver<anyhow::Result<Option<std::path::PathBuf>>> {
         let (sender, receiver) = futures::channel::oneshot::channel();
-        let _ = sender.send(Ok(None));
+
+        let mut dialog = rfd::AsyncFileDialog::new();
+        dialog = dialog.set_title("Save File");
+        dialog = dialog.set_directory(directory);
+        if let Some(file_name) = suggested_name {
+            dialog = dialog.set_file_name(file_name);
+        }
+        let task = self.foreground_executor().spawn(async move {
+            let selection = dialog.save_file().await;
+            let path = selection.map(|handle| handle.path().to_owned());
+            let _ = sender.send(Ok(path));
+        });
+        task.detach();
+
         receiver
     }
 
     fn can_select_mixed_files_and_dirs(&self) -> bool {
+        // rfd does not support the capability for a user to select both files and folders in the same AsyncFileDialog.
         false
     }
 
     fn reveal_path(&self, _path: &std::path::Path) {
+        // Have not yet found a decent cross-platform crate that handles the reveal-in-native-file-manager behavior.
+        // Could partially be implemented by delegating to `::open::that_detached(directory)`, but that would be a half-measure because it would
+        // still be missing "select the file" portion of revealing a path (plus, revealing a directory should select the director in the parent folder).
+        // examples:
+        // https://github.com/zed-industries/zed/blob/e2e7a6769e693c843c82cea2dcf65917c139cc0f/crates/gpui_windows/src/platform.rs#L1091
+        // https://github.com/tauri-apps/plugins-workspace/blob/4350ca652d33e3face88d7c97a78830553545550/plugins/opener/src/reveal_item_in_dir.rs
         log::warn!("reveal_path is not yet implemented on this platform");
     }
 
-    fn open_with_system(&self, _path: &std::path::Path) {
-        log::warn!("open_with_system is not yet implemented on this platform");
+    fn open_with_system(&self, path: &std::path::Path) {
+        if let Err(err) = ::open::that_detached(path) {
+            log::error!("failed to open_with_system {path:?}: {err:?}");
+        }
     }
 
     fn on_quit(&self, callback: Box<dyn FnMut()>) {
@@ -331,9 +429,17 @@ impl Platform for CrossPlatform {
         self.callbacks.on_reopen.set(Some(callback));
     }
 
-    fn set_menus(&self, _menus: Vec<crate::Menu>, _keymap: &crate::Keymap) {}
+    fn set_menus(&self, _menus: Vec<crate::Menu>, _keymap: &crate::Keymap) {
+        log::warn!(
+            "set_menus is not yet implemented on this platform, https://github.com/Far-Beyond-Pulsar/WGPUI/issues/26"
+        );
+    }
 
-    fn set_dock_menu(&self, _menu: Vec<crate::MenuItem>, _keymap: &crate::Keymap) {}
+    fn set_dock_menu(&self, _menu: Vec<crate::MenuItem>, _keymap: &crate::Keymap) {
+        log::warn!(
+            "set_dock_menu is not yet implemented on this platform, https://github.com/Far-Beyond-Pulsar/WGPUI/issues/27"
+        );
+    }
 
     fn on_app_menu_action(&self, callback: Box<dyn FnMut(&dyn crate::Action)>) {
         self.callbacks.on_app_menu_action.set(Some(callback));
