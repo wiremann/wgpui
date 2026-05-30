@@ -157,34 +157,55 @@ impl Platform for CrossPlatform {
     }
 
     fn restart(&self, _binary_path: Option<std::path::PathBuf>) {
-        log::warn!("restart is not yet implemented on this platform");
+        log::warn!(
+            "restart is not yet implemented on this platform, https://github.com/Far-Beyond-Pulsar/WGPUI/issues/29"
+        );
     }
 
-    fn activate(&self, _ignoring_other_apps: bool) {}
+    fn activate(&self, _ignoring_other_apps: bool) {
+        log::warn!(
+            "activate is not yet implemented on this platform, https://github.com/Far-Beyond-Pulsar/WGPUI/issues/29"
+        );
+    }
 
     fn hide(&self) {
-        log::warn!("hide is not yet implemented on this platform");
+        log::warn!(
+            "hide is not yet implemented on this platform, https://github.com/Far-Beyond-Pulsar/WGPUI/issues/29"
+        );
     }
 
     fn hide_other_apps(&self) {
-        log::warn!("hide_other_apps is not yet implemented on this platform");
+        log::warn!(
+            "hide_other_apps is not yet implemented on this platform, https://github.com/Far-Beyond-Pulsar/WGPUI/issues/29"
+        );
     }
 
     fn unhide_other_apps(&self) {
-        log::warn!("unhide_other_apps is not yet implemented on this platform");
+        log::warn!(
+            "unhide_other_apps is not yet implemented on this platform, https://github.com/Far-Beyond-Pulsar/WGPUI/issues/29"
+        );
     }
 
     fn displays(&self) -> Vec<Rc<dyn crate::PlatformDisplay>> {
+        log::warn!(
+            "multiple display support is not yet implemented on this platform, https://github.com/Far-Beyond-Pulsar/WGPUI/issues/28"
+        );
         // TODO(mdeand): Add support for multiple displays.
         vec![]
     }
 
     fn primary_display(&self) -> Option<Rc<dyn crate::PlatformDisplay>> {
+        log::warn!(
+            "multiple display support is not yet implemented on this platform, https://github.com/Far-Beyond-Pulsar/WGPUI/issues/28"
+        );
         // TODO(mdeand): Add support for multiple displays and primary display.
         None
     }
 
     fn active_window(&self) -> Option<crate::AnyWindowHandle> {
+        log::warn!(
+            "multiple display support is not yet implemented on this platform, https://github.com/Far-Beyond-Pulsar/WGPUI/issues/28"
+        );
         // TODO(mdeand): Add support for tracking active window.
         None
     }
@@ -409,11 +430,15 @@ impl Platform for CrossPlatform {
     }
 
     fn set_menus(&self, _menus: Vec<crate::Menu>, _keymap: &crate::Keymap) {
-        log::warn!("set_menus is not yet implemented on this platform");
+        log::warn!(
+            "set_menus is not yet implemented on this platform, https://github.com/Far-Beyond-Pulsar/WGPUI/issues/26"
+        );
     }
 
     fn set_dock_menu(&self, _menu: Vec<crate::MenuItem>, _keymap: &crate::Keymap) {
-        log::warn!("set_dock_menu is not yet implemented on this platform");
+        log::warn!(
+            "set_dock_menu is not yet implemented on this platform, https://github.com/Far-Beyond-Pulsar/WGPUI/issues/27"
+        );
     }
 
     fn on_app_menu_action(&self, callback: Box<dyn FnMut(&dyn crate::Action)>) {
