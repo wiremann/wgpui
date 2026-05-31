@@ -175,6 +175,19 @@ impl Application {
         self
     }
 
+    /// Enables single-instance behavior for this application.
+    ///
+    /// When another launch is attempted, the running instance receives the
+    /// existing [`Application::on_reopen`] callback and the new process exits
+    /// with an error.
+    pub fn with_single_instance(self, app_id: impl AsRef<str>) -> Result<Self> {
+        self.0
+            .borrow()
+            .platform
+            .enable_single_instance(app_id.as_ref())?;
+        Ok(self)
+    }
+
     /// Start the application. The provided callback will be called once the
     /// app is fully launched.
     pub fn run<F>(self, on_finish_launching: F)
@@ -201,6 +214,8 @@ impl Application {
 
     /// Invokes a handler when an already-running application is launched.
     /// On macOS, this can occur when the application icon is double-clicked or the app is launched via the dock.
+    /// When [`Application::with_single_instance`] is enabled, it also fires for a
+    /// second launch that activates the existing instance.
     pub fn on_reopen<F>(&self, mut callback: F) -> &Self
     where
         F: 'static + FnMut(&mut App),

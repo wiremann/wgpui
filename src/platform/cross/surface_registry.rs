@@ -1,6 +1,6 @@
 use std::collections::HashMap;
-use std::sync::atomic::{AtomicU8, AtomicU64, Ordering};
 use std::sync::Mutex;
+use std::sync::atomic::{AtomicU8, AtomicU64, Ordering};
 
 /// An opaque identifier for a registered WGPU surface.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
@@ -72,7 +72,7 @@ impl SurfaceRegistry {
         device: &wgpu::Device,
         width: u32,
         height: u32,
-        format: wgpu::TextureFormat
+        format: wgpu::TextureFormat,
     ) -> SurfaceId {
         let id = SurfaceId(self.next_id.fetch_add(1, Ordering::Relaxed));
         let tb = Self::create_triple_buffer(device, width, height, format);
@@ -94,8 +94,13 @@ impl SurfaceRegistry {
             let current = tb.state.load(Ordering::Acquire);
             let (rendering, ready, display) = TripleBuffer::unpack_state(current);
 
-            log::debug!("[surface_id={:?}] swap_rendering_ready called - state before: rendering={}, ready={}, display={}",
-                id, rendering, ready, display);
+            log::debug!(
+                "[surface_id={:?}] swap_rendering_ready called - state before: rendering={}, ready={}, display={}",
+                id,
+                rendering,
+                ready,
+                display
+            );
 
             // Store submission index for the buffer we just rendered to
             tb.submission_indices.lock().unwrap()[rendering as usize] = Some(submission_idx);
@@ -105,12 +110,10 @@ impl SurfaceRegistry {
             loop {
                 let (rendering, ready, display) = TripleBuffer::unpack_state(current);
                 let next = TripleBuffer::pack_state(ready, rendering, display);
-                match tb.state.compare_exchange(
-                    current,
-                    next,
-                    Ordering::AcqRel,
-                    Ordering::Acquire,
-                ) {
+                match tb
+                    .state
+                    .compare_exchange(current, next, Ordering::AcqRel, Ordering::Acquire)
+                {
                     Ok(_) => break,
                     Err(updated) => current = updated,
                 }
@@ -128,12 +131,10 @@ impl SurfaceRegistry {
             loop {
                 let (rendering, ready, display) = TripleBuffer::unpack_state(current);
                 let next = TripleBuffer::pack_state(ready, rendering, display);
-                match tb.state.compare_exchange(
-                    current,
-                    next,
-                    Ordering::AcqRel,
-                    Ordering::Acquire,
-                ) {
+                match tb
+                    .state
+                    .compare_exchange(current, next, Ordering::AcqRel, Ordering::Acquire)
+                {
                     Ok(_) => break,
                     Err(updated) => current = updated,
                 }
@@ -160,12 +161,10 @@ impl SurfaceRegistry {
             loop {
                 let (rendering, ready, display) = TripleBuffer::unpack_state(current);
                 let next = TripleBuffer::pack_state(rendering, display, ready);
-                match tb.state.compare_exchange(
-                    current,
-                    next,
-                    Ordering::AcqRel,
-                    Ordering::Acquire,
-                ) {
+                match tb
+                    .state
+                    .compare_exchange(current, next, Ordering::AcqRel, Ordering::Acquire)
+                {
                     Ok(_) => return true,
                     Err(updated) => current = updated,
                 }
@@ -197,7 +196,7 @@ impl SurfaceRegistry {
     /// resources (e.g. a depth buffer) that must exactly match the view's size.
     pub fn lock_and_get_back_with_size(
         &self,
-        id: SurfaceId
+        id: SurfaceId,
     ) -> Option<(wgpu::TextureView, (u32, u32))> {
         let surfaces = self.surfaces.lock().unwrap();
         surfaces.get(&id).map(|tb| {
@@ -292,29 +291,27 @@ impl SurfaceRegistry {
         device: &wgpu::Device,
         width: u32,
         height: u32,
-        format: wgpu::TextureFormat
+        format: wgpu::TextureFormat,
     ) -> TripleBuffer {
         let w = width.max(1);
         let h = height.max(1);
 
         let create_texture = |label: &str| {
-            device.create_texture(
-                &wgpu::TextureDescriptor {
-                    label: Some(label),
-                    size: wgpu::Extent3d {
-                        width: w,
-                        height: h,
-                        depth_or_array_layers: 1,
-                    },
-                    mip_level_count: 1,
-                    sample_count: 1,
-                    dimension: wgpu::TextureDimension::D2,
-                    format,
-                    usage: wgpu::TextureUsages::RENDER_ATTACHMENT |
-                           wgpu::TextureUsages::TEXTURE_BINDING,
-                    view_formats: &[],
-                }
-            )
+            device.create_texture(&wgpu::TextureDescriptor {
+                label: Some(label),
+                size: wgpu::Extent3d {
+                    width: w,
+                    height: h,
+                    depth_or_array_layers: 1,
+                },
+                mip_level_count: 1,
+                sample_count: 1,
+                dimension: wgpu::TextureDimension::D2,
+                format,
+                usage: wgpu::TextureUsages::RENDER_ATTACHMENT
+                    | wgpu::TextureUsages::TEXTURE_BINDING,
+                view_formats: &[],
+            })
         };
 
         let tex0 = create_texture("surface_buffer_0");
@@ -337,4 +334,3 @@ impl SurfaceRegistry {
         }
     }
 }
-

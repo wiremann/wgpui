@@ -2,8 +2,8 @@
 ///
 /// Set `WGPU_SURFACE_STRESS_ROWS` to control the row count (default: 8).
 use gpui::{
-    div, prelude::*, px, rgb, rgba, wgpu_surface, App, Application, Context, Render,
-    WgpuSurfaceHandle, Window, WindowOptions,
+    App, Application, Context, Render, WgpuSurfaceHandle, Window, WindowOptions, div, prelude::*,
+    px, rgb, rgba, wgpu_surface,
 };
 use std::sync::Arc;
 use wgpu::util::DeviceExt;

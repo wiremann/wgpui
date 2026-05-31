@@ -5,9 +5,9 @@ use std::sync::{Arc, Mutex};
 use wgpu::util::DeviceExt;
 
 use crate::{
-    AtlasTextureId, AtlasTile, DevicePixels, GpuSpecs, GradientStop, LinearColorStop, MonochromeSprite,
-    PlatformAtlas, Pixels, PrimitiveBatch, Quad, ScaledPixels, Scene, TransformationMatrix,
-    color, geometry,
+    AtlasTextureId, AtlasTile, DevicePixels, GpuSpecs, GradientStop, LinearColorStop,
+    MonochromeSprite, Pixels, PlatformAtlas, PrimitiveBatch, Quad, ScaledPixels, Scene,
+    TransformationMatrix, color, geometry,
     platform::cross::{
         atlas::WgpuAtlas,
         render_context::{WgpuContext, ensure_buffer_size},
@@ -2494,13 +2494,11 @@ impl WgpuRenderer {
                             entries: &[
                                 wgpu::BindGroupEntry {
                                     binding: 0,
-                                    resource: wgpu::BindingResource::Buffer(
-                                        wgpu::BufferBinding {
-                                            buffer: &params_buffer,
-                                            offset: 0,
-                                            size: None,
-                                        },
-                                    ),
+                                    resource: wgpu::BindingResource::Buffer(wgpu::BufferBinding {
+                                        buffer: &params_buffer,
+                                        offset: 0,
+                                        size: None,
+                                    }),
                                 },
                                 wgpu::BindGroupEntry {
                                     binding: 1,
@@ -2508,9 +2506,7 @@ impl WgpuRenderer {
                                 },
                                 wgpu::BindGroupEntry {
                                     binding: 2,
-                                    resource: wgpu::BindingResource::Sampler(
-                                        &self.surface_sampler,
-                                    ),
+                                    resource: wgpu::BindingResource::Sampler(&self.surface_sampler),
                                 },
                             ],
                         });
@@ -2527,7 +2523,9 @@ impl WgpuRenderer {
 
         // Clear redraw flags only for surfaces that presented fresh frames.
         for surface_id in pending_surfaces {
-            self.context.surface_registry.clear_redraw_pending(*surface_id);
+            self.context
+                .surface_registry
+                .clear_redraw_pending(*surface_id);
         }
 
         true

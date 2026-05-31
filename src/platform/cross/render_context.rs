@@ -16,7 +16,7 @@ pub struct WgpuContext {
     pub(super) mono_sprites_buffer: Mutex<wgpu::Buffer>,
     pub(super) poly_sprites_buffer: Mutex<wgpu::Buffer>,
     pub(super) color_adjustments_buffer: wgpu::Buffer,
-        pub(super) paths_vertices_buffer: Mutex<wgpu::Buffer>,
+    pub(super) paths_vertices_buffer: Mutex<wgpu::Buffer>,
 
     pub(crate) surface_registry: Arc<SurfaceRegistry>,
 }
@@ -50,10 +50,12 @@ impl WgpuContext {
                 .into_iter()
                 .filter(|adapter| adapter.features().contains(required_features))
                 .max_by_key(|adapter| adapter.features().contains(optional_features))
-                .ok_or_else(|| anyhow::anyhow!(
-                    "No adapter available with required features: {:?}",
-                    required_features
-                ))?;
+                .ok_or_else(|| {
+                    anyhow::anyhow!(
+                        "No adapter available with required features: {:?}",
+                        required_features
+                    )
+                })?;
             let device_features = if adapter.features().contains(optional_features) {
                 required_features | optional_features
             } else {
@@ -68,22 +70,25 @@ impl WgpuContext {
             let adapter = adapters
                 .into_iter()
                 .find(|adapter| adapter.features().contains(required_features))
-                .ok_or_else(|| anyhow::anyhow!(
-                    "No adapter available with required features: {:?}",
-                    required_features
-                ))?;
+                .ok_or_else(|| {
+                    anyhow::anyhow!(
+                        "No adapter available with required features: {:?}",
+                        required_features
+                    )
+                })?;
             (adapter, required_features)
         };
 
-        let (device, queue) = pollster::block_on(adapter.request_device(&wgpu::DeviceDescriptor {
-            label: None,
-            required_features: device_features,
-            required_limits: wgpu::Limits {
-                max_binding_array_elements_per_shader_stage: 512,
-                ..adapter.limits()
-            },
-            ..Default::default()
-        }))?;
+        let (device, queue) =
+            pollster::block_on(adapter.request_device(&wgpu::DeviceDescriptor {
+                label: None,
+                required_features: device_features,
+                required_limits: wgpu::Limits {
+                    max_binding_array_elements_per_shader_stage: 512,
+                    ..adapter.limits()
+                },
+                ..Default::default()
+            }))?;
 
         let globals_buffer = device.create_buffer(&wgpu::BufferDescriptor {
             label: Some("Globals Buffer"),
@@ -148,13 +153,13 @@ impl WgpuContext {
                 | wgpu::BufferUsages::STORAGE,
             mapped_at_creation: false,
         });
-        
-            let paths_vertices_buffer = device.create_buffer(&wgpu::BufferDescriptor {
-                label: Some("Path Vertices Buffer"),
-                size: 8 * 1024 * 1024, // 8 MB – ~174 k vertices @ 48 bytes each
-                usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST,
-                mapped_at_creation: false,
-            });
+
+        let paths_vertices_buffer = device.create_buffer(&wgpu::BufferDescriptor {
+            label: Some("Path Vertices Buffer"),
+            size: 8 * 1024 * 1024, // 8 MB – ~174 k vertices @ 48 bytes each
+            usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST,
+            mapped_at_creation: false,
+        });
 
         let color_adjustments_buffer = device.create_buffer(&wgpu::BufferDescriptor {
             label: Some("Color Adjustments Buffer"),
@@ -180,11 +185,10 @@ impl WgpuContext {
             poly_sprites_buffer: Mutex::new(poly_sprites_buffer),
             color_adjustments_buffer,
 
-                paths_vertices_buffer: Mutex::new(paths_vertices_buffer),
+            paths_vertices_buffer: Mutex::new(paths_vertices_buffer),
             surface_registry: Arc::new(SurfaceRegistry::new()),
         })
     }
-
 }
 
 /// Ensures a buffer is large enough to hold the required size.

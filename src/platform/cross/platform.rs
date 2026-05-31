@@ -1,9 +1,9 @@
 use crate::{
-    BackgroundExecutor, Capslock, DevicePixels, DummyKeyboardMapper, ForegroundExecutor,
-    ExternalPaths, FileDropEvent, KeyDownEvent, KeyUpEvent, Keystroke, Modifiers,
-    ModifiersChangedEvent, MouseButton,
-    MouseDownEvent, MouseExitEvent, MouseMoveEvent, MouseUpEvent, Pixels, Platform, PlatformInput,
-    PlatformWindow as _, PriorityQueueReceiver, RunnableVariant, ScrollWheelEvent, Size,
+    BackgroundExecutor, Capslock, DevicePixels, DummyKeyboardMapper, ExternalPaths, FileDropEvent,
+    ForegroundExecutor, KeyDownEvent, KeyUpEvent, Keystroke, Modifiers, ModifiersChangedEvent,
+    MouseButton, MouseDownEvent, MouseExitEvent, MouseMoveEvent, MouseUpEvent, Pixels, Platform,
+    PlatformInput, PlatformWindow as _, PriorityQueueReceiver, RunnableVariant, ScrollWheelEvent,
+    Size,
     platform::cross::{
         dispatcher::{CrossEvent, Dispatcher},
         keyboard::CrossKeyboardLayout,
@@ -33,10 +33,17 @@ use collections::FxHashMap;
 use std::{
     cell::{Cell, RefCell},
     collections::HashSet,
+    fs::{self, OpenOptions},
+    io::{Read, Write},
+    net::{TcpListener, TcpStream},
     path::PathBuf,
     rc::Rc,
-    sync::Arc,
-    time::Instant,
+    sync::{
+        Arc,
+        atomic::{AtomicBool, Ordering},
+    },
+    thread,
+    time::{Duration, Instant},
 };
 use winit::event_loop::ActiveEventLoop;
 
@@ -61,9 +68,10 @@ pub(crate) struct CrossPlatform {
     main_rx: PriorityQueueReceiver<RunnableVariant>,
     event_loop: Cell<Option<winit::event_loop::EventLoop<CrossEvent>>>,
     event_loop_proxy: winit::event_loop::EventLoopProxy<CrossEvent>,
-    callbacks: PlatformCallbacks,
+    callbacks: Rc<PlatformCallbacks>,
     menus: RefCell<Option<Vec<crate::OwnedMenu>>>,
     dock_menu: RefCell<Vec<crate::OwnedMenuItem>>,
+    single_instance: RefCell<Option<SingleInstanceRuntime>>,
 }
 
 #[derive(Default)]
@@ -80,6 +88,7 @@ struct AppState {
     windows: FxHashMap<winit::window::WindowId, CrossWindow>,
     window_handles: FxHashMap<winit::window::WindowId, crate::AnyWindowHandle>,
     on_finish_launching: Cell<Option<Box<dyn 'static + FnOnce()>>>,
+    callbacks: Rc<PlatformCallbacks>,
     main_rx: PriorityQueueReceiver<RunnableVariant>,
     current_modifiers: Modifiers,
     pressed_button: Option<MouseButton>,
@@ -87,6 +96,12 @@ struct AppState {
     active_window_id: Cell<Option<winit::window::WindowId>>,
     hovered_window_id: Cell<Option<winit::window::WindowId>>,
     hovered_external_paths: Vec<PathBuf>,
+}
+
+struct SingleInstanceRuntime {
+    lock_path: PathBuf,
+    stop: Arc<AtomicBool>,
+    listener_thread: Option<thread::JoinHandle<()>>,
 }
 
 struct ClickState {
@@ -116,10 +131,135 @@ impl CrossPlatform {
             main_rx,
             event_loop: Cell::new(Some(event_loop)),
             event_loop_proxy,
-            callbacks: PlatformCallbacks::default(),
+            callbacks: Rc::new(PlatformCallbacks::default()),
             menus: RefCell::new(None),
             dock_menu: RefCell::new(Vec::new()),
+            single_instance: RefCell::new(None),
         })
+    }
+
+    fn enable_single_instance(&self, app_id: &str) -> Result<()> {
+        if self.single_instance.borrow().is_some() {
+            return Ok(());
+        }
+
+        let lock_path = single_instance_lock_path(app_id);
+        match acquire_single_instance_lock(&lock_path, self.event_loop_proxy.clone()) {
+            Ok(runtime) => {
+                self.single_instance.borrow_mut().replace(runtime);
+                Ok(())
+            }
+            Err(err) => Err(err),
+        }
+    }
+}
+
+fn single_instance_lock_path(app_id: &str) -> PathBuf {
+    let app_hash = seahash::hash(app_id.as_bytes());
+    std::env::temp_dir().join(format!("gpui-single-instance-{app_hash:016x}.lock"))
+}
+
+fn acquire_single_instance_lock(
+    lock_path: &PathBuf,
+    event_loop_proxy: winit::event_loop::EventLoopProxy<
+        crate::platform::cross::dispatcher::CrossEvent,
+    >,
+) -> Result<SingleInstanceRuntime> {
+    let mut retried = false;
+
+    loop {
+        match OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .open(lock_path)
+        {
+            Ok(mut lock_file) => {
+                let listener = TcpListener::bind(("127.0.0.1", 0))?;
+                let port = listener.local_addr()?.port();
+                writeln!(lock_file, "{port}")?;
+
+                listener.set_nonblocking(true)?;
+                let stop = Arc::new(AtomicBool::new(false));
+                let thread_stop = stop.clone();
+                let thread_proxy = event_loop_proxy.clone();
+                let thread_lock_path = lock_path.clone();
+                let listener_thread = thread::spawn(move || {
+                    while !thread_stop.load(Ordering::SeqCst) {
+                        match listener.accept() {
+                            Ok((mut stream, _)) => {
+                                let mut buffer = [0u8; 16];
+                                let _ = stream.read(&mut buffer);
+                                let _ = thread_proxy.send_event(
+                                    crate::platform::cross::dispatcher::CrossEvent::SingleInstanceActivated,
+                                );
+                            }
+                            Err(err) if err.kind() == std::io::ErrorKind::WouldBlock => {
+                                thread::sleep(Duration::from_millis(50));
+                            }
+                            Err(err) => {
+                                log::error!(
+                                    "single-instance listener stopped for {:?}: {err:?}",
+                                    thread_lock_path
+                                );
+                                break;
+                            }
+                        }
+                    }
+                });
+
+                return Ok(SingleInstanceRuntime {
+                    lock_path: lock_path.clone(),
+                    stop,
+                    listener_thread: Some(listener_thread),
+                });
+            }
+            Err(err) if err.kind() == std::io::ErrorKind::AlreadyExists => {
+                match notify_existing_single_instance(lock_path) {
+                    Ok(()) => return Err(anyhow::anyhow!("another instance is already running")),
+                    Err(notify_err) if !retried => {
+                        retried = true;
+                        if let Err(remove_err) = fs::remove_file(lock_path) {
+                            log::warn!(
+                                "failed to remove stale single-instance lock {:?}: {remove_err:?}",
+                                lock_path
+                            );
+                            return Err(anyhow::anyhow!("another instance is already running"));
+                        }
+                        log::warn!(
+                            "recovering stale single-instance lock {:?}: {notify_err:?}",
+                            lock_path
+                        );
+                        continue;
+                    }
+                    Err(notify_err) => {
+                        return Err(anyhow::anyhow!(
+                            "failed to contact running instance for {:?}: {notify_err:?}",
+                            lock_path
+                        ));
+                    }
+                }
+            }
+            Err(err) => return Err(err.into()),
+        }
+    }
+}
+
+fn notify_existing_single_instance(lock_path: &PathBuf) -> Result<()> {
+    let port_text = fs::read_to_string(lock_path)?;
+    let port: u16 = port_text.trim().parse()?;
+    let mut stream = TcpStream::connect(("127.0.0.1", port))?;
+    stream.write_all(b"activate")?;
+    stream.flush()?;
+    Ok(())
+}
+
+impl Drop for SingleInstanceRuntime {
+    fn drop(&mut self) {
+        self.stop.store(true, Ordering::SeqCst);
+        if let Some(listener_thread) = self.listener_thread.take() {
+            let _ = listener_thread.join();
+        }
+        let _ = fs::remove_file(&self.lock_path);
     }
 }
 
@@ -143,6 +283,7 @@ impl Platform for CrossPlatform {
             windows: Default::default(),
             window_handles: Default::default(),
             on_finish_launching: Cell::new(Some(on_finish_launching)),
+            callbacks: self.callbacks.clone(),
             main_rx: self.main_rx.clone(),
             current_modifiers: Modifiers::default(),
             pressed_button: None,
@@ -237,8 +378,11 @@ impl Platform for CrossPlatform {
     fn primary_display(&self) -> Option<Rc<dyn crate::PlatformDisplay>> {
         with_active_context(|event_loop, _| {
             let (displays, primary_id) = collect_displays(event_loop);
-            primary_id
-                .and_then(|primary_id| displays.into_iter().find(|display| display.id() == primary_id))
+            primary_id.and_then(|primary_id| {
+                displays
+                    .into_iter()
+                    .find(|display| display.id() == primary_id)
+            })
         })
         .flatten()
     }
@@ -500,6 +644,10 @@ impl Platform for CrossPlatform {
         self.callbacks.on_reopen.set(Some(callback));
     }
 
+    fn enable_single_instance(&self, app_id: &str) -> anyhow::Result<()> {
+        CrossPlatform::enable_single_instance(self, app_id)
+    }
+
     fn set_menus(&self, menus: Vec<crate::Menu>, _keymap: &crate::Keymap) {
         let owned_menus = menus.into_iter().map(crate::Menu::owned).collect();
         *self.menus.borrow_mut() = Some(owned_menus);
@@ -704,6 +852,12 @@ impl winit::application::ApplicationHandler<CrossEvent> for AppState {
                     window.window().request_redraw();
                 }
             }
+            CrossEvent::SingleInstanceActivated => {
+                if let Some(mut callback) = self.callbacks.on_reopen.take() {
+                    callback();
+                    self.callbacks.on_reopen.set(Some(callback));
+                }
+            }
             CrossEvent::CloseWindow(window_id) => {
                 // Programmatic close: remove from platform map so the winit
                 // window is dropped and the OS window actually disappears.
@@ -729,9 +883,7 @@ impl winit::application::ApplicationHandler<CrossEvent> for AppState {
                 if std::env::var_os("GPUI_DEBUG_MOUSE").is_some() {
                     eprintln!(
                         "[WGPUI] DeviceEvent Button {} {:?} pressed_button={:?}",
-                        button,
-                        state,
-                        self.pressed_button
+                        button, state, self.pressed_button
                     );
                 }
 
@@ -801,6 +953,9 @@ impl winit::application::ApplicationHandler<CrossEvent> for AppState {
 
         if let Some(on_finish_launching) = self.on_finish_launching.take() {
             on_finish_launching();
+        } else if let Some(mut callback) = self.callbacks.on_reopen.take() {
+            callback();
+            self.callbacks.on_reopen.set(Some(callback));
         }
 
         self.clear_active_context();
@@ -1068,13 +1223,12 @@ impl winit::application::ApplicationHandler<CrossEvent> for AppState {
                 let was_hovered = window.0.state.is_hovered.get();
                 window.0.state.is_hovered.set(true);
                 if !was_hovered {
-                    window
-                        .0
-                        .state
-                        .callbacks
-                        .invoke_mut(&window.0.state.callbacks.on_hover_status_change, |cb| {
+                    window.0.state.callbacks.invoke_mut(
+                        &window.0.state.callbacks.on_hover_status_change,
+                        |cb| {
                             cb(true);
-                        });
+                        },
+                    );
                 }
             }
             winit::event::WindowEvent::CursorMoved { position, .. } => {
@@ -1082,13 +1236,12 @@ impl winit::application::ApplicationHandler<CrossEvent> for AppState {
                 let was_hovered = window.0.state.is_hovered.get();
                 window.0.state.is_hovered.set(true);
                 if !was_hovered {
-                    window
-                        .0
-                        .state
-                        .callbacks
-                        .invoke_mut(&window.0.state.callbacks.on_hover_status_change, |cb| {
+                    window.0.state.callbacks.invoke_mut(
+                        &window.0.state.callbacks.on_hover_status_change,
+                        |cb| {
                             cb(true);
-                        });
+                        },
+                    );
                 }
                 let scale_factor = window.scale_factor();
                 let position = point(
@@ -1113,9 +1266,8 @@ impl winit::application::ApplicationHandler<CrossEvent> for AppState {
                     });
 
                 if !self.hovered_external_paths.is_empty() {
-                    let file_drop_event = PlatformInput::FileDrop(FileDropEvent::Pending {
-                        position,
-                    });
+                    let file_drop_event =
+                        PlatformInput::FileDrop(FileDropEvent::Pending { position });
 
                     window
                         .0
@@ -1130,13 +1282,12 @@ impl winit::application::ApplicationHandler<CrossEvent> for AppState {
             winit::event::WindowEvent::CursorLeft { .. } => {
                 self.hovered_window_id.set(None);
                 window.0.state.is_hovered.set(false);
-                window
-                    .0
-                    .state
-                    .callbacks
-                    .invoke_mut(&window.0.state.callbacks.on_hover_status_change, |cb| {
+                window.0.state.callbacks.invoke_mut(
+                    &window.0.state.callbacks.on_hover_status_change,
+                    |cb| {
                         cb(false);
-                    });
+                    },
+                );
                 let position = window.0.state.mouse_position.get();
                 let platform_event = PlatformInput::MouseExited(MouseExitEvent {
                     position,
@@ -1343,8 +1494,14 @@ impl crate::PlatformDisplay for CrossDisplay {
 
 fn collect_displays(
     event_loop: &ActiveEventLoop,
-) -> (Vec<Rc<dyn crate::PlatformDisplay>>, Option<crate::DisplayId>) {
-    let primary_fingerprint = event_loop.primary_monitor().as_ref().map(monitor_fingerprint);
+) -> (
+    Vec<Rc<dyn crate::PlatformDisplay>>,
+    Option<crate::DisplayId>,
+) {
+    let primary_fingerprint = event_loop
+        .primary_monitor()
+        .as_ref()
+        .map(monitor_fingerprint);
 
     let mut primary_display_id = None;
     let mut used_display_ids = HashSet::new();
@@ -1615,8 +1772,9 @@ mod tests {
 
     #[test]
     fn translates_space_to_text_input() {
-        let keystroke = winit_key_to_keystroke(&Key::Named(NamedKey::Space), Modifiers::default(), &None)
-            .expect("space should produce a keystroke");
+        let keystroke =
+            winit_key_to_keystroke(&Key::Named(NamedKey::Space), Modifiers::default(), &None)
+                .expect("space should produce a keystroke");
 
         assert_eq!(keystroke.key, "space");
         assert_eq!(keystroke.key_char.as_deref(), Some(" "));
@@ -1660,28 +1818,28 @@ fn set_macos_dock_icon(icon: &crate::WindowIcon) {
     // and the Dock renders the tile bigger than every other app icon.
     const MAX_DOCK_ICON_PX: u32 = 512;
 
-    let Some(buf) = ImageBuffer::<Rgba<u8>, _>::from_raw(
-        icon.width,
-        icon.height,
-        icon.rgba.clone(),
-    ) else {
+    let Some(buf) =
+        ImageBuffer::<Rgba<u8>, _>::from_raw(icon.width, icon.height, icon.rgba.clone())
+    else {
         log::warn!("set_macos_dock_icon: icon dimensions don't match pixel buffer");
         return;
     };
 
     // Downscale only if the image is larger than the Dock cap.
     let buf = if icon.width > MAX_DOCK_ICON_PX || icon.height > MAX_DOCK_ICON_PX {
-        imageops::resize(&buf, MAX_DOCK_ICON_PX, MAX_DOCK_ICON_PX, imageops::FilterType::Lanczos3)
+        imageops::resize(
+            &buf,
+            MAX_DOCK_ICON_PX,
+            MAX_DOCK_ICON_PX,
+            imageops::FilterType::Lanczos3,
+        )
     } else {
         buf
     };
 
     let mut png: Vec<u8> = Vec::new();
     if buf
-        .write_to(
-            &mut std::io::Cursor::new(&mut png),
-            image::ImageFormat::Png,
-        )
+        .write_to(&mut std::io::Cursor::new(&mut png), image::ImageFormat::Png)
         .is_err()
     {
         log::warn!("set_macos_dock_icon: failed to encode icon as PNG");

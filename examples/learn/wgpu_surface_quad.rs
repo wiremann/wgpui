@@ -2,8 +2,8 @@
 ///
 /// This is intended for validating multi-surface composition and fast-blit behavior.
 use gpui::{
-    div, prelude::*, px, rgb, rgba, wgpu_surface, App, Application, Context, Render,
-    WgpuSurfaceHandle, Window, WindowOptions,
+    App, Application, Context, Render, WgpuSurfaceHandle, Window, WindowOptions, div, prelude::*,
+    px, rgb, rgba, wgpu_surface,
 };
 use std::sync::Arc;
 use wgpu::util::DeviceExt;

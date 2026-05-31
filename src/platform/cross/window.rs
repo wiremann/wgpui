@@ -1,13 +1,10 @@
 use crate::{
-    Bounds, Capslock, Decorations, Modifiers, Pixels, PlatformInputHandler,
-    PlatformWindow, Point, ResizeEdge, Size, WgpuSurfaceHandle, WindowAppearance,
-    WindowBackgroundAppearance, WindowBounds,
+    Bounds, Capslock, Decorations, Modifiers, Pixels, PlatformInputHandler, PlatformWindow, Point,
+    ResizeEdge, Size, WgpuSurfaceHandle, WindowAppearance, WindowBackgroundAppearance,
+    WindowBounds,
     platform::cross::{
-        atlas::WgpuAtlas,
-        dispatcher::CrossEvent,
-        render_context::WgpuContext,
-        renderer::WgpuRenderer,
-        resize_detector::ResizeDetector,
+        atlas::WgpuAtlas, dispatcher::CrossEvent, render_context::WgpuContext,
+        renderer::WgpuRenderer, resize_detector::ResizeDetector,
     },
 };
 use std::{
@@ -138,7 +135,10 @@ impl CrossWindow {
     /// its reference and the OS window is actually destroyed.
     pub(crate) fn close_programmatically(&self) {
         if let Some(w) = self.0.winit_window.get() {
-            let _ = self.0.event_loop_proxy.send_event(CrossEvent::CloseWindow(w.id()));
+            let _ = self
+                .0
+                .event_loop_proxy
+                .send_event(CrossEvent::CloseWindow(w.id()));
         }
     }
 }
@@ -415,11 +415,7 @@ impl PlatformWindow for CrossWindow {
         // Build the present trigger: sends a CrossEvent to wake the event loop
         // and request a redraw for this window.
         let proxy = self.0.event_loop_proxy.clone();
-        let window_id = self
-            .0
-            .winit_window
-            .get()
-            .map(|w| w.id());
+        let window_id = self.0.winit_window.get().map(|w| w.id());
         let present_trigger: Arc<dyn Fn() + Send + Sync> = Arc::new(move || {
             if let Some(wid) = window_id {
                 let _ = proxy.send_event(CrossEvent::SurfacePresent(wid));
@@ -427,11 +423,7 @@ impl PlatformWindow for CrossWindow {
         });
 
         // capture winit window Arc so handle can request redraw directly
-        let winit_arc = self
-            .0
-            .winit_window
-            .get()
-            .cloned();
+        let winit_arc = self.0.winit_window.get().cloned();
         Some(WgpuSurfaceHandle::new(
             ctx.device.clone(),
             ctx.queue.clone(),

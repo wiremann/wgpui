@@ -83,4 +83,3 @@ impl Default for ResizeDetector {
         Self::new()
     }
 }
-

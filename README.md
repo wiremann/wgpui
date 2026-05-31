@@ -90,6 +90,8 @@ cargo run --example hello_world
 
 Everything starts with `Application::new().run(|cx: &mut App| { ... })`. Inside the callback, open windows with `cx.open_window(options, |_, cx| cx.new(|_| MyView))`. A window requires a root view — any type that implements `Render`.
 
+If you want repeated launches to reactivate the existing instance instead of starting a second one, call `with_single_instance(...)` before `run` and handle `on_reopen` to focus or create windows.
+
 ### Entity\<T\>
 
 `Entity<T>` is a reference-counted handle to application state owned by GPUI. All reads and mutations go through the context:

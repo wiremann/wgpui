@@ -5,7 +5,6 @@ use crate::{
 };
 use anyhow::Result;
 use futures::FutureExt;
-use util::Deferred;
 use std::{
     any::{Any, TypeId},
     borrow::{Borrow, BorrowMut},
@@ -13,6 +12,7 @@ use std::{
     ops,
     sync::Arc,
 };
+use util::Deferred;
 
 use super::{App, AsyncWindowContext, Entity, KeystrokeEvent};
 

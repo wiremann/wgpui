@@ -121,6 +121,7 @@ pub(crate) trait Platform: 'static {
 
     fn on_quit(&self, callback: Box<dyn FnMut()>);
     fn on_reopen(&self, callback: Box<dyn FnMut()>);
+    fn enable_single_instance(&self, app_id: &str) -> anyhow::Result<()>;
 
     fn set_menus(&self, menus: Vec<Menu>, keymap: &Keymap);
     fn get_menus(&self) -> Option<Vec<OwnedMenu>> {
@@ -1115,14 +1116,22 @@ impl WindowIcon {
         if rgba.len() != (width * height * 4) as usize {
             return None;
         }
-        Some(Self { rgba, width, height })
+        Some(Self {
+            rgba,
+            width,
+            height,
+        })
     }
 
     /// Decode any image format supported by the `image` crate (PNG, ICO, …) from bytes.
     pub fn from_png_bytes(bytes: &[u8]) -> anyhow::Result<Self> {
         let img = image::load_from_memory(bytes)?.into_rgba8();
         let (width, height) = img.dimensions();
-        Ok(Self { rgba: img.into_raw(), width, height })
+        Ok(Self {
+            rgba: img.into_raw(),
+            width,
+            height,
+        })
     }
 }
 
