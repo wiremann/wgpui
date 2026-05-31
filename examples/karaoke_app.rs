@@ -61,7 +61,6 @@ impl KaraokeApp {
             LyricLine::new("how much I love you", 1.8, rgb(0xff7b35)),
             LyricLine::new("Please don't take", 1.8, rgb(0xff6b35)),
             LyricLine::new("my sunshine away", 1.7, rgb(0xff5a28)),
-
             // Verse 1 - cool blues
             LyricLine::new("The other night dear", 1.8, rgb(0x5da6ff)),
             LyricLine::new("as I lay sleeping", 1.7, rgb(0x4d96ff)),
@@ -71,7 +70,6 @@ impl KaraokeApp {
             LyricLine::new("I was mistaken", 1.5, rgb(0x1d68ff)),
             LyricLine::new("So I hung my head", 1.8, rgb(0x1d58d4)),
             LyricLine::new("and cried", 1.2, rgb(0x1d48c4)),
-
             // Chorus repeat - warm sunny colors
             LyricLine::new("You are my sunshine", 1.8, rgb(0xffd700)),
             LyricLine::new("my only sunshine", 1.7, rgb(0xffcc00)),
@@ -81,7 +79,6 @@ impl KaraokeApp {
             LyricLine::new("how much I love you", 1.8, rgb(0xff7b35)),
             LyricLine::new("Please don't take", 1.8, rgb(0xff6b35)),
             LyricLine::new("my sunshine away", 1.7, rgb(0xff5a28)),
-
             // Verse 2 - purples and magentas
             LyricLine::new("I'll always love you", 1.8, rgb(0xda70d6)),
             LyricLine::new("and make you happy", 1.5, rgb(0xca60c6)),
@@ -91,7 +88,6 @@ impl KaraokeApp {
             LyricLine::new("to love another", 1.7, rgb(0x8a2aa3)),
             LyricLine::new("You'll regret it all", 1.8, rgb(0x7a1f93)),
             LyricLine::new("some day", 1.4, rgb(0x6a0f83)),
-
             // Final chorus - golden finale
             LyricLine::new("You are my sunshine", 1.8, rgb(0xffd700)),
             LyricLine::new("my only sunshine", 1.7, rgb(0xffcc00)),
@@ -125,7 +121,10 @@ impl KaraokeApp {
     fn start_playback(&mut self, cx: &mut Context<Self>) {
         cx.spawn(async move |this, cx| {
             loop {
-                let total_lines = this.update(cx, |this, _| this.song.lines.len()).ok().unwrap_or(0);
+                let total_lines = this
+                    .update(cx, |this, _| this.song.lines.len())
+                    .ok()
+                    .unwrap_or(0);
 
                 for line_idx in 0..total_lines {
                     let duration = this
@@ -432,7 +431,11 @@ impl RenderOnce for ProgressBar {
                         div()
                             .text_size(px(12.0))
                             .text_color(rgba(0xbbbbbbff))
-                            .child(format!("Line {}/{}", self.current_line + 1, self.total_lines)),
+                            .child(format!(
+                                "Line {}/{}",
+                                self.current_line + 1,
+                                self.total_lines
+                            )),
                     )
                     .child(
                         div()
@@ -475,14 +478,11 @@ impl RenderOnce for AnimatedBackground {
             (rgba(0x1a1814ff), rgba(0x0a0a08ff))
         };
 
-        div()
-            .absolute()
-            .inset_0()
-            .bg(linear_gradient(
-                145.0,
-                gradient_color_stop(c1, 0.0),
-                gradient_color_stop(c2, 1.0),
-            ))
+        div().absolute().inset_0().bg(linear_gradient(
+            145.0,
+            gradient_color_stop(c1, 0.0),
+            gradient_color_stop(c2, 1.0),
+        ))
     }
 }
 
@@ -510,31 +510,26 @@ impl Render for KaraokeApp {
                     .items_center()
                     .justify_center()
                     .child(
-                        div()
-                            .relative()
-                            .w_full()
-                            .h_full()
-                            .overflow_hidden()
-                            .child(
-                                div()
-                                    .relative()
-                                    .top(px(180.0))
-                                    .w_full()
-                                    .children(self.song.lines.iter().enumerate().filter_map(
-                                        |(idx, line)| {
-                                            let visual_pos = idx as f32 - playback.scroll_position;
-                                            if visual_pos < -2.5 || visual_pos > 7.0 {
-                                                return None;
-                                            }
+                        div().relative().w_full().h_full().overflow_hidden().child(
+                            div().relative().top(px(180.0)).w_full().children(
+                                self.song
+                                    .lines
+                                    .iter()
+                                    .enumerate()
+                                    .filter_map(|(idx, line)| {
+                                        let visual_pos = idx as f32 - playback.scroll_position;
+                                        if visual_pos < -2.5 || visual_pos > 7.0 {
+                                            return None;
+                                        }
 
-                                            Some(LyricLineComponent::new(
-                                                line.clone(),
-                                                idx,
-                                                playback.clone(),
-                                            ))
-                                        },
-                                    )),
+                                        Some(LyricLineComponent::new(
+                                            line.clone(),
+                                            idx,
+                                            playback.clone(),
+                                        ))
+                                    }),
                             ),
+                        ),
                     ),
             )
             .child(TitleBar::new(

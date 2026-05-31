@@ -191,6 +191,10 @@ name = "wgpu_surface_basic"
 path = "examples/learn/wgpu_surface_basic.rs"
 
 [[example]]
+name = "wgpu_surface_quad"
+path = "examples/learn/wgpu_surface_quad.rs"
+
+[[example]]
 name = "blur_showcase"
 path = "examples/learn/blur_showcase.rs"
 

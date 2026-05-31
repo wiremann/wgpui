@@ -76,12 +76,7 @@ impl Render for KaraokeDemo {
                             .w(px(600.0))
                             .h(px(8.0))
                             .bg(rgb(0x333333))
-                            .child(
-                                div()
-                                    .w(relative(self.progress))
-                                    .h_full()
-                                    .bg(rgb(0x00d4ff)),
-                            ),
+                            .child(div().w(relative(self.progress)).h_full().bg(rgb(0x00d4ff))),
                     )
                     .child(
                         div()

@@ -1,8 +1,9 @@
-/// Example: WgpuSurface with a spinning cube
-/// Demonstrates raw wgpu rendering within a gpui WgpuSurface — no third-party renderers.
+/// Example: render four WgpuSurface views at the same time.
+///
+/// This is intended for validating multi-surface composition and fast-blit behavior.
 use gpui::{
-    App, Application, Context, Render, WgpuSurfaceHandle, Window, WindowOptions, div, prelude::*,
-    rgb, wgpu_surface,
+    div, prelude::*, px, rgb, rgba, wgpu_surface, App, Application, Context, Render,
+    WgpuSurfaceHandle, Window, WindowOptions,
 };
 use std::sync::Arc;
 use wgpu::util::DeviceExt;
@@ -38,37 +39,30 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
 }
 "#;
 
-// 24 vertices: 4 per face x 6 faces. Each vertex: [x, y, z, r, g, b].
 #[rustfmt::skip]
 const VERTICES: &[[f32; 6]] = &[
-    // Front  (+Z) — red
     [-0.5, -0.5,  0.5,  0.90, 0.20, 0.20], [ 0.5, -0.5,  0.5,  0.90, 0.20, 0.20],
     [ 0.5,  0.5,  0.5,  1.00, 0.50, 0.50], [-0.5,  0.5,  0.5,  1.00, 0.50, 0.50],
-    // Back   (-Z) — green
     [ 0.5, -0.5, -0.5,  0.20, 0.80, 0.20], [-0.5, -0.5, -0.5,  0.20, 0.80, 0.20],
     [-0.5,  0.5, -0.5,  0.50, 1.00, 0.50], [ 0.5,  0.5, -0.5,  0.50, 1.00, 0.50],
-    // Left   (-X) — blue
     [-0.5, -0.5, -0.5,  0.20, 0.20, 0.90], [-0.5, -0.5,  0.5,  0.20, 0.20, 0.90],
     [-0.5,  0.5,  0.5,  0.50, 0.50, 1.00], [-0.5,  0.5, -0.5,  0.50, 0.50, 1.00],
-    // Right  (+X) — yellow
     [ 0.5, -0.5,  0.5,  0.90, 0.90, 0.20], [ 0.5, -0.5, -0.5,  0.90, 0.90, 0.20],
     [ 0.5,  0.5, -0.5,  1.00, 1.00, 0.50], [ 0.5,  0.5,  0.5,  1.00, 1.00, 0.50],
-    // Top    (+Y) — cyan
     [-0.5,  0.5,  0.5,  0.20, 0.90, 0.90], [ 0.5,  0.5,  0.5,  0.20, 0.90, 0.90],
     [ 0.5,  0.5, -0.5,  0.50, 1.00, 1.00], [-0.5,  0.5, -0.5,  0.50, 1.00, 1.00],
-    // Bottom (-Y) — magenta
     [-0.5, -0.5, -0.5,  0.90, 0.20, 0.90], [ 0.5, -0.5, -0.5,  0.90, 0.20, 0.90],
     [ 0.5, -0.5,  0.5,  1.00, 0.50, 1.00], [-0.5, -0.5,  0.5,  1.00, 0.50, 1.00],
 ];
 
 #[rustfmt::skip]
 const INDICES: &[u16] = &[
-     0,  1,  2,   0,  2,  3,  // Front
-     4,  5,  6,   4,  6,  7,  // Back
-     8,  9, 10,   8, 10, 11,  // Left
-    12, 13, 14,  12, 14, 15,  // Right
-    16, 17, 18,  16, 18, 19,  // Top
-    20, 21, 22,  20, 22, 23,  // Bottom
+     0,  1,  2,   0,  2,  3,
+     4,  5,  6,   4,  6,  7,
+     8,  9, 10,   8, 10, 11,
+    12, 13, 14,  12, 14, 15,
+    16, 17, 18,  16, 18, 19,
+    20, 21, 22,  20, 22, 23,
 ];
 
 struct CubeRenderState {
@@ -83,6 +77,9 @@ struct CubeRenderState {
     start_time: std::time::Instant,
     width: u32,
     height: u32,
+    speed: f32,
+    phase: f32,
+    clear: [f64; 3],
 }
 
 impl CubeRenderState {
@@ -92,6 +89,9 @@ impl CubeRenderState {
         width: u32,
         height: u32,
         color_format: wgpu::TextureFormat,
+        speed: f32,
+        phase: f32,
+        clear: [f64; 3],
     ) -> Self {
         let shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
             label: Some("cube_shader"),
@@ -100,7 +100,7 @@ impl CubeRenderState {
 
         let uniform_buffer = device.create_buffer(&wgpu::BufferDescriptor {
             label: Some("cube_uniforms"),
-            size: 64, // mat4x4<f32> = 64 bytes
+            size: 64,
             usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
             mapped_at_creation: false,
         });
@@ -141,7 +141,7 @@ impl CubeRenderState {
                 module: &shader,
                 entry_point: Some("vs_main"),
                 buffers: &[wgpu::VertexBufferLayout {
-                    array_stride: 24, // 6 x f32 = 24 bytes
+                    array_stride: 24,
                     step_mode: wgpu::VertexStepMode::Vertex,
                     attributes: &[
                         wgpu::VertexAttribute {
@@ -212,6 +212,9 @@ impl CubeRenderState {
             start_time: std::time::Instant::now(),
             width,
             height,
+            speed,
+            phase,
+            clear,
         }
     }
 
@@ -240,8 +243,7 @@ impl CubeRenderState {
     }
 
     fn render(&mut self, view: &wgpu::TextureView) {
-        let t = self.start_time.elapsed().as_secs_f32();
-
+        let t = self.start_time.elapsed().as_secs_f32() * self.speed + self.phase;
         let aspect = self.width as f32 / self.height.max(1) as f32;
         let proj = glam::Mat4::perspective_rh(std::f32::consts::FRAC_PI_4, aspect, 0.1, 100.0);
         let camera = glam::Mat4::look_at_rh(
@@ -249,9 +251,8 @@ impl CubeRenderState {
             glam::Vec3::ZERO,
             glam::Vec3::Y,
         );
-        let model = glam::Mat4::from_rotation_y(t * 1.1) * glam::Mat4::from_rotation_x(t * 0.65);
+        let model = glam::Mat4::from_rotation_y(t) * glam::Mat4::from_rotation_x(t * 0.65);
         let mvp: [[f32; 4]; 4] = (proj * camera * model).to_cols_array_2d();
-
         self.queue
             .write_buffer(&self.uniform_buffer, 0, bytemuck::bytes_of(&mvp));
 
@@ -261,7 +262,7 @@ impl CubeRenderState {
                 label: Some("cube_encoder"),
             });
         {
-            let mut rpass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+            let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
                 label: Some("cube_pass"),
                 color_attachments: &[Some(wgpu::RenderPassColorAttachment {
                     view,
@@ -269,9 +270,9 @@ impl CubeRenderState {
                     depth_slice: None,
                     ops: wgpu::Operations {
                         load: wgpu::LoadOp::Clear(wgpu::Color {
-                            r: 0.05,
-                            g: 0.05,
-                            b: 0.08,
+                            r: self.clear[0],
+                            g: self.clear[1],
+                            b: self.clear[2],
                             a: 1.0,
                         }),
                         store: wgpu::StoreOp::Store,
@@ -289,40 +290,68 @@ impl CubeRenderState {
                 occlusion_query_set: None,
                 multiview_mask: None,
             });
-            rpass.set_pipeline(&self.pipeline);
-            rpass.set_bind_group(0, &self.bind_group, &[]);
-            rpass.set_vertex_buffer(0, self.vertex_buffer.slice(..));
-            rpass.set_index_buffer(self.index_buffer.slice(..), wgpu::IndexFormat::Uint16);
-            rpass.draw_indexed(0..INDICES.len() as u32, 0, 0..1);
+            pass.set_pipeline(&self.pipeline);
+            pass.set_bind_group(0, &self.bind_group, &[]);
+            pass.set_vertex_buffer(0, self.vertex_buffer.slice(..));
+            pass.set_index_buffer(self.index_buffer.slice(..), wgpu::IndexFormat::Uint16);
+            pass.draw_indexed(0..INDICES.len() as u32, 0, 0..1);
         }
         self.queue.submit(std::iter::once(encoder.finish()));
     }
 }
 
-/// State for the spinning-cube example.
-///
-/// The cube is rendered directly inside `Render::render()` on the GPUI main thread.
-/// This guarantees that the wgpu GPU commands for the cube are submitted *before*
-/// the compositor's commands in the same frame, so the DX12 resource barriers
-/// wgpu generates are always in the correct order — no cross-thread sync needed.
-struct SurfaceExample {
+struct SurfaceTile {
+    title: &'static str,
     surface: WgpuSurfaceHandle,
-    /// Lazily initialised once the surface has been laid out and sized.
     state: Option<CubeRenderState>,
     frame_count: u32,
     last_fps_update: std::time::Instant,
     display_fps: f64,
+    speed: f32,
+    phase: f32,
+    clear: [f64; 3],
 }
 
-impl Render for SurfaceExample {
-    fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
-        // Render the cube into the back buffer this frame.
-        if let Some((view, (w, h))) = self.surface.back_view_with_size() {
-            let state = self.state.get_or_insert_with(|| {
-                let device = Arc::new(self.surface.device().clone());
-                let queue = Arc::new(self.surface.queue().clone());
-                let format = self.surface.format();
-                CubeRenderState::new(device, queue, w, h, format)
+impl SurfaceTile {
+    fn new(
+        title: &'static str,
+        surface: WgpuSurfaceHandle,
+        speed: f32,
+        phase: f32,
+        clear: [f64; 3],
+    ) -> Self {
+        Self {
+            title,
+            surface,
+            state: None,
+            frame_count: 0,
+            last_fps_update: std::time::Instant::now(),
+            display_fps: 0.0,
+            speed,
+            phase,
+            clear,
+        }
+    }
+}
+
+struct QuadSurfaceExample {
+    tiles: [SurfaceTile; 4],
+}
+
+impl QuadSurfaceExample {
+    fn render_tile(tile: &mut SurfaceTile) {
+        if let Some((view, (w, h))) = tile.surface.back_view_with_size() {
+            let state = tile.state.get_or_insert_with(|| {
+                CubeRenderState::new(
+                    Arc::new(tile.surface.device().clone()),
+                    Arc::new(tile.surface.queue().clone()),
+                    w,
+                    h,
+                    tile.surface.format(),
+                    tile.speed,
+                    tile.phase,
+                    tile.clear,
+                )
             });
 
             if state.width != w || state.height != h {
@@ -331,37 +360,62 @@ impl Render for SurfaceExample {
 
             state.render(&view);
             drop(view);
+            tile.surface.swap_buffers();
 
-            // Swap rendering→ready. The compositor (running right after this
-            // method returns) calls swap_ready_display() and samples the texture
-            // we just rendered into, within the same GPU submission sequence.
-            self.surface.swap_buffers();
-
-            self.frame_count = self.frame_count.wrapping_add(1);
+            tile.frame_count = tile.frame_count.wrapping_add(1);
             let now = std::time::Instant::now();
-            if now.duration_since(self.last_fps_update) >= std::time::Duration::from_secs(1) {
-                self.display_fps = self.frame_count as f64;
-                self.frame_count = 0;
-                self.last_fps_update = now;
+            if now.duration_since(tile.last_fps_update) >= std::time::Duration::from_secs(1) {
+                tile.display_fps = tile.frame_count as f64;
+                tile.frame_count = 0;
+                tile.last_fps_update = now;
             }
         }
+    }
 
-        // Mark the entity dirty so GPUI keeps scheduling redraws at vsync rate.
-        cx.notify();
-
+    fn tile_element(tile: &SurfaceTile) -> impl IntoElement {
         div()
-            .w(gpui::px(800.0))
-            .h(gpui::px(600.0))
-            .bg(rgb(0x0d0d14))
-            .child(wgpu_surface(self.surface.clone()).absolute().inset_0())
+            .relative()
+            .h(px(320.0))
+            .border_1()
+            .border_color(rgb(0x2a2e3a))
+            .rounded_md()
+            .bg(rgb(0x10131a))
+            .child(wgpu_surface(tile.surface.clone()).absolute().inset_0())
             .child(
                 div()
                     .absolute()
-                    .top(gpui::px(4.0))
-                    .left(gpui::px(8.0))
-                    .text_color(rgb(0x8888bb))
-                    .child(format!("{:.0} fps", self.display_fps)),
+                    .top(px(6.0))
+                    .left(px(8.0))
+                    .px_2()
+                    .py_1()
+                    .bg(rgba(0x0000008c))
+                    .rounded_sm()
+                    .text_color(rgb(0xe4ecff))
+                    .text_sm()
+                    .child(format!("{}  {:.0} fps", tile.title, tile.display_fps)),
             )
+    }
+}
+
+impl Render for QuadSurfaceExample {
+    fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        for tile in &mut self.tiles {
+            Self::render_tile(tile);
+        }
+        cx.notify();
+
+        div().size_full().p_3().bg(rgb(0x0b0e14)).child(
+            div()
+                .size_full()
+                .grid()
+                .grid_cols(2)
+                .grid_rows(2)
+                .gap_2()
+                .child(Self::tile_element(&self.tiles[0]))
+                .child(Self::tile_element(&self.tiles[1]))
+                .child(Self::tile_element(&self.tiles[2]))
+                .child(Self::tile_element(&self.tiles[3])),
+        )
     }
 }
 
@@ -371,16 +425,52 @@ fn main() {
         _ = cx.open_window(
             WindowOptions::default(),
             |window: &mut Window, cx: &mut App| {
-                let surface = window
-                    .create_wgpu_surface(800, 600, wgpu::TextureFormat::Rgba8UnormSrgb)
-                    .expect("WgpuSurface not supported on this platform");
+                let surfaces = [
+                    window
+                        .create_wgpu_surface(640, 360, wgpu::TextureFormat::Rgba8UnormSrgb)
+                        .expect("WgpuSurface not supported on this platform"),
+                    window
+                        .create_wgpu_surface(640, 360, wgpu::TextureFormat::Rgba8UnormSrgb)
+                        .expect("WgpuSurface not supported on this platform"),
+                    window
+                        .create_wgpu_surface(640, 360, wgpu::TextureFormat::Rgba8UnormSrgb)
+                        .expect("WgpuSurface not supported on this platform"),
+                    window
+                        .create_wgpu_surface(640, 360, wgpu::TextureFormat::Rgba8UnormSrgb)
+                        .expect("WgpuSurface not supported on this platform"),
+                ];
 
-                cx.new(|_cx| SurfaceExample {
-                    surface,
-                    state: None,
-                    frame_count: 0,
-                    last_fps_update: std::time::Instant::now(),
-                    display_fps: 0.0,
+                cx.new(|_cx| QuadSurfaceExample {
+                    tiles: [
+                        SurfaceTile::new(
+                            "Surface A",
+                            surfaces[0].clone(),
+                            1.10,
+                            0.0,
+                            [0.06, 0.08, 0.14],
+                        ),
+                        SurfaceTile::new(
+                            "Surface B",
+                            surfaces[1].clone(),
+                            1.45,
+                            0.8,
+                            [0.12, 0.05, 0.10],
+                        ),
+                        SurfaceTile::new(
+                            "Surface C",
+                            surfaces[2].clone(),
+                            0.85,
+                            1.5,
+                            [0.05, 0.11, 0.08],
+                        ),
+                        SurfaceTile::new(
+                            "Surface D",
+                            surfaces[3].clone(),
+                            1.75,
+                            2.2,
+                            [0.10, 0.09, 0.04],
+                        ),
+                    ],
                 })
             },
         );

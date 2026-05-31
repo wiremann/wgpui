@@ -2,6 +2,7 @@ use std::collections::HashMap;
 use std::mem::ManuallyDrop;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
+use wgpu::util::DeviceExt;
 
 use crate::{
     AtlasTextureId, AtlasTile, DevicePixels, GpuSpecs, GradientStop, LinearColorStop, MonochromeSprite,
@@ -1432,7 +1433,6 @@ pub struct WgpuRenderer {
     surface_configuration: wgpu::SurfaceConfiguration,
     atlas_sampler: wgpu::Sampler,
     surface_sampler: wgpu::Sampler,
-    surface_params_buffer: wgpu::Buffer,
     atlas: Arc<WgpuAtlas>,
     pipelines: WgpuPipelines,
     rendering_parameters: RenderingParameters,
@@ -1556,13 +1556,6 @@ impl WgpuRenderer {
             ..Default::default()
         });
 
-        let surface_params_buffer = context.device.create_buffer(&wgpu::BufferDescriptor {
-            label: Some("Surface Params Buffer"),
-            size: std::mem::size_of::<SurfaceParams>() as u64,
-            usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
-            mapped_at_creation: false,
-        });
-
         let pipelines =
             WgpuPipelines::new(context.as_ref(), &surface_configuration, path_sample_count);
 
@@ -1614,7 +1607,6 @@ impl WgpuRenderer {
             atlas_sampler,
             surface_sampler,
             backdrop_blur_sampler,
-            surface_params_buffer,
             pipelines,
             rendering_parameters: RenderingParameters::from_env(),
             surface_bind_groups: Mutex::new(HashMap::new()),
@@ -1647,6 +1639,8 @@ impl WgpuRenderer {
         // CRITICAL: Keep surface views alive until after the render pass ends
         // The bind groups reference these views, so they must not be dropped early
         let mut surface_views: Vec<wgpu::TextureView> = Vec::new();
+        // Surface bind groups also reference per-surface params buffers.
+        let mut surface_param_buffers: Vec<wgpu::Buffer> = Vec::new();
 
         let color_adjustments = ColorAdjustments {
             gamma_ratios: self.rendering_parameters.gamma_ratios,
@@ -2266,10 +2260,12 @@ impl WgpuRenderer {
                                         },
                                     );
 
-                                    self.context.queue.write_buffer(
-                                        &self.surface_params_buffer,
-                                        0,
-                                        bytemuck::bytes_of(&params),
+                                    let params_buffer = self.context.device.create_buffer_init(
+                                        &wgpu::util::BufferInitDescriptor {
+                                            label: Some("surface_params_buffer"),
+                                            contents: bytemuck::bytes_of(&params),
+                                            usage: wgpu::BufferUsages::UNIFORM,
+                                        },
                                     );
 
                                     let surface_bind_group = self.context.device.create_bind_group(
@@ -2281,7 +2277,7 @@ impl WgpuRenderer {
                                                     binding: 0,
                                                     resource: wgpu::BindingResource::Buffer(
                                                         wgpu::BufferBinding {
-                                                            buffer: &self.surface_params_buffer,
+                                                            buffer: &params_buffer,
                                                             offset: 0,
                                                             size: None,
                                                         },
@@ -2311,6 +2307,7 @@ impl WgpuRenderer {
                                     // CRITICAL: Keep view alive until after render pass ends
                                     // The bind_group holds a reference to it
                                     surface_views.push(view);
+                                    surface_param_buffers.push(params_buffer);
 
                                     // Clear redraw pending AFTER we're done with the view
                                     // This prevents the external thread from triggering another compositor
@@ -2351,62 +2348,53 @@ impl WgpuRenderer {
         log::debug!("Renderer::draw: frame complete");
     }
 
-    /// Fast path: blit a surface directly to persistent framebuffer WITHOUT running compositor
-    /// Returns true if successful, false if bounds cache miss (need full compositor)
-    pub fn blit_surface_direct(&self, surface_id: SurfaceId) -> bool {
-        log::info!("[FAST BLIT] Attempting for surface {:?}", surface_id);
-
-        // 1. Check if we have cached bounds
-        let cache = self.surface_bounds_cache.lock().unwrap();
-        let Some(entry) = cache.get(&surface_id) else {
-            log::debug!(
-                "[surface_id={:?}] Fast blit failed: no cached bounds",
-                surface_id
-            );
-            return false; // No bounds, need compositor
-        };
-
-        // 2. Check if bounds are stale
-        if entry.layout_version != self.layout_version.load(Ordering::Acquire) {
-            log::debug!(
-                "[surface_id={:?}] Fast blit failed: stale bounds (layout version mismatch)",
-                surface_id
-            );
-            return false; // Layout changed, need compositor
-        };
-
-        let screen_bounds = entry.screen_bounds;
-        let content_mask = entry.content_mask;
-        drop(cache); // Release lock
-
-        // 3. Atomic buffer swap with GPU synchronization
-        let swapped = self
-            .context
-            .surface_registry
-            .swap_ready_display(&self.context.device, surface_id);
-
-        if !swapped {
-            log::trace!(
-                "[surface_id={:?}] No new frame, reusing current display buffer",
-                surface_id
-            );
+    /// Fast path: blit all visible surfaces in a single swapchain pass.
+    /// Returns true if successful, false if compositor should run.
+    pub fn blit_surfaces_direct(&self, pending_surfaces: &[SurfaceId]) -> bool {
+        if pending_surfaces.is_empty() {
+            return false;
         }
 
-        // 4. Get surface texture view
-        let Some(view) = self.context.surface_registry.front_view(surface_id) else {
-            log::debug!(
-                "[surface_id={:?}] Fast blit failed: no front view",
-                surface_id
-            );
-            return false;
+        let layout_version = self.layout_version.load(Ordering::Acquire);
+        let mut visible_surfaces = {
+            let cache = self.surface_bounds_cache.lock().unwrap();
+
+            // Fast path is valid only when bounds are current.
+            if cache
+                .values()
+                .any(|entry| entry.layout_version != layout_version)
+            {
+                return false;
+            }
+
+            // Every pending surface must be currently visible with cached bounds.
+            if pending_surfaces
+                .iter()
+                .any(|surface_id| !cache.contains_key(surface_id))
+            {
+                return false;
+            }
+
+            cache
+                .iter()
+                .map(|(surface_id, entry)| (*surface_id, entry.screen_bounds, entry.content_mask))
+                .collect::<Vec<_>>()
         };
 
-        // 5. Blit surface → swapchain directly (TODO: blit to persistent framebuffer)
-        log::debug!(
-            "[surface_id={:?}] Fast blit: blitting to swapchain at bounds {:?}",
-            surface_id,
-            screen_bounds
-        );
+        if visible_surfaces.is_empty() {
+            return false;
+        }
+
+        // Keep deterministic ordering.
+        visible_surfaces.sort_unstable_by_key(|(surface_id, _, _)| surface_id.0);
+
+        // Flip ready -> display for surfaces that actually rendered new frames.
+        for surface_id in pending_surfaces {
+            let _ = self
+                .context
+                .surface_registry
+                .swap_ready_display(&self.context.device, *surface_id);
+        }
 
         // Acquire swapchain (handle retryable surface errors the same as regular draw).
         let surface_texture = match self.surface.get_current_texture() {
@@ -2443,14 +2431,15 @@ impl WgpuRenderer {
                 .create_command_encoder(&wgpu::CommandEncoderDescriptor {
                     label: Some("fast_surface_blit"),
                 });
+        let swapchain_view = surface_texture
+            .texture
+            .create_view(&wgpu::TextureViewDescriptor::default());
 
         {
             let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
                 label: Some("fast_surface_blit_pass"),
                 color_attachments: &[Some(wgpu::RenderPassColorAttachment {
-                    view: &surface_texture
-                        .texture
-                        .create_view(&wgpu::TextureViewDescriptor::default()),
+                    view: &swapchain_view,
                     ops: wgpu::Operations {
                         load: wgpu::LoadOp::Load, // Preserve existing swapchain content
                         store: wgpu::StoreOp::Store,
@@ -2464,70 +2453,84 @@ impl WgpuRenderer {
                 multiview_mask: None,
             });
 
-            // Prepare surface params with cached bounds
-            let _scale_factor =
-                self.surface_configuration.width as f32 / self.surface_configuration.width as f32; // TODO: Get actual scale factor
-            let params = SurfaceParams {
-                bounds: Bounds {
-                    origin: [screen_bounds.origin.x.0, screen_bounds.origin.y.0],
-                    size: [screen_bounds.size.width.0, screen_bounds.size.height.0],
-                },
-                content_mask: Bounds {
-                    origin: [content_mask.origin.x.0, content_mask.origin.y.0],
-                    size: [content_mask.size.width.0, content_mask.size.height.0],
-                },
-            };
-
-            self.context.queue.write_buffer(
-                &self.surface_params_buffer,
-                0,
-                bytemuck::bytes_of(&params),
-            );
-
-            // Create bind group for this surface (must match surfaces.wgsl binding order)
-            let surface_bind_group =
-                self.context
-                    .device
-                    .create_bind_group(&wgpu::BindGroupDescriptor {
-                        label: Some("fast_blit_surface_bind_group"),
-                        layout: &self.pipelines.surfaces_bind_group_layout,
-                        entries: &[
-                            wgpu::BindGroupEntry {
-                                binding: 0,
-                                resource: wgpu::BindingResource::Buffer(wgpu::BufferBinding {
-                                    buffer: &self.surface_params_buffer,
-                                    offset: 0,
-                                    size: None,
-                                }),
-                            },
-                            wgpu::BindGroupEntry {
-                                binding: 1,
-                                resource: wgpu::BindingResource::TextureView(&view),
-                            },
-                            wgpu::BindGroupEntry {
-                                binding: 2,
-                                resource: wgpu::BindingResource::Sampler(&self.surface_sampler),
-                            },
-                        ],
-                    });
-
-            // Render surface quad using existing surfaces.wgsl shader
             pass.set_pipeline(&self.pipelines.surfaces_pipeline);
             pass.set_bind_group(0, &self.pipelines.globals_bind_group, &[]);
-            pass.set_bind_group(1, &surface_bind_group, &[]);
-            pass.draw(0..4, 0..1);
+
+            // Keep views and params buffers alive until pass ends (bind groups reference them).
+            let mut surface_views = Vec::new();
+            let mut surface_param_buffers = Vec::new();
+
+            for (surface_id, screen_bounds, content_mask) in &visible_surfaces {
+                let Some(view) = self.context.surface_registry.front_view(*surface_id) else {
+                    return false;
+                };
+
+                let params = SurfaceParams {
+                    bounds: Bounds {
+                        origin: [screen_bounds.origin.x.0, screen_bounds.origin.y.0],
+                        size: [screen_bounds.size.width.0, screen_bounds.size.height.0],
+                    },
+                    content_mask: Bounds {
+                        origin: [content_mask.origin.x.0, content_mask.origin.y.0],
+                        size: [content_mask.size.width.0, content_mask.size.height.0],
+                    },
+                };
+
+                let params_buffer =
+                    self.context
+                        .device
+                        .create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                            label: Some("fast_blit_surface_params_buffer"),
+                            contents: bytemuck::bytes_of(&params),
+                            usage: wgpu::BufferUsages::UNIFORM,
+                        });
+
+                let surface_bind_group =
+                    self.context
+                        .device
+                        .create_bind_group(&wgpu::BindGroupDescriptor {
+                            label: Some("fast_blit_surface_bind_group"),
+                            layout: &self.pipelines.surfaces_bind_group_layout,
+                            entries: &[
+                                wgpu::BindGroupEntry {
+                                    binding: 0,
+                                    resource: wgpu::BindingResource::Buffer(
+                                        wgpu::BufferBinding {
+                                            buffer: &params_buffer,
+                                            offset: 0,
+                                            size: None,
+                                        },
+                                    ),
+                                },
+                                wgpu::BindGroupEntry {
+                                    binding: 1,
+                                    resource: wgpu::BindingResource::TextureView(&view),
+                                },
+                                wgpu::BindGroupEntry {
+                                    binding: 2,
+                                    resource: wgpu::BindingResource::Sampler(
+                                        &self.surface_sampler,
+                                    ),
+                                },
+                            ],
+                        });
+
+                pass.set_bind_group(1, &surface_bind_group, &[]);
+                pass.draw(0..4, 0..1);
+                surface_views.push(view);
+                surface_param_buffers.push(params_buffer);
+            }
         }
 
         self.context.queue.submit(Some(encoder.finish()));
         surface_texture.present();
 
-        // 6. Clear redraw flag (external thread can continue)
-        self.context
-            .surface_registry
-            .clear_redraw_pending(surface_id);
+        // Clear redraw flags only for surfaces that presented fresh frames.
+        for surface_id in pending_surfaces {
+            self.context.surface_registry.clear_redraw_pending(*surface_id);
+        }
 
-        log::info!("[FAST BLIT] SUCCESS for surface {:?}", surface_id);
-        true // Success
+        true
     }
 
     /// Get list of surfaces that have pending redraws

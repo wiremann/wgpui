@@ -886,13 +886,8 @@ impl winit::application::ApplicationHandler<CrossEvent> for AppState {
                 let mut fast_blit_succeeded = false;
                 if let Some(renderer) = window.0.renderer.get() {
                     let renderer_ref = renderer.borrow();
-                    // Get all pending surfaces from the registry
                     if let Some(pending_surfaces) = renderer_ref.get_pending_surfaces() {
-                        for surface_id in pending_surfaces {
-                            if renderer_ref.blit_surface_direct(surface_id) {
-                                fast_blit_succeeded = true;
-                            }
-                        }
+                        fast_blit_succeeded = renderer_ref.blit_surfaces_direct(&pending_surfaces);
                     }
                 }
 
