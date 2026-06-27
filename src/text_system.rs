@@ -9,6 +9,7 @@ pub use font_features::*;
 pub use line::*;
 pub use line_layout::*;
 pub use line_wrapper::*;
+use ordered_float::OrderedFloat;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
@@ -466,6 +467,7 @@ impl WindowTextSystem {
                         font_id,
                         weight: run.font.weight,
                         style: run.font.style,
+                        letter_spacing: run.letter_spacing,
                     });
                 }
 
@@ -582,6 +584,7 @@ impl WindowTextSystem {
                     font_id,
                     weight: run.font.weight,
                     style: run.font.style,
+                    letter_spacing: run.letter_spacing,
                 });
             }
         }
@@ -756,6 +759,8 @@ pub struct TextRun {
     pub underline: Option<UnderlineStyle>,
     /// The strikethrough style (if any)
     pub strikethrough: Option<StrikethroughStyle>,
+    /// Tracking in EM units.
+    pub letter_spacing: Option<OrderedFloat<f32>>,
 }
 
 /// An identifier for a specific glyph, as returned by [`WindowTextSystem::layout_line`].
