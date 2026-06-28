@@ -285,7 +285,12 @@ impl TextSystem {
     }
 
     /// Returns a handle to a line wrapper, for the given font and font size.
-    pub fn line_wrapper(self: &Arc<Self>, font: Font, font_size: Pixels) -> LineWrapperHandle {
+    pub fn line_wrapper(
+        self: &Arc<Self>,
+        font: Font,
+        font_size: Pixels,
+        letter_spacing: Option<f32>,
+    ) -> LineWrapperHandle {
         let lock = &mut self.wrapper_pool.lock();
         let font_id = self.resolve_font(&font);
         let wrappers = lock
@@ -297,6 +302,7 @@ impl TextSystem {
                 font_size,
                 font.weight,
                 font.style,
+                letter_spacing,
                 self.platform_text_system.clone(),
             )
         });

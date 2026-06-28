@@ -26,6 +26,7 @@ impl LineWrapper {
         font_size: Pixels,
         weight: FontWeight,
         style: FontStyle,
+        letter_spacing: Option<f32>,
         text_system: Arc<dyn PlatformTextSystem>,
     ) -> Self {
         Self {
@@ -34,7 +35,7 @@ impl LineWrapper {
             font_size,
             weight,
             style,
-            letter_spacing: None,
+            letter_spacing,
             cached_ascii_char_widths: [None; 128],
             cached_other_char_widths: HashMap::default(),
         }
@@ -341,6 +342,7 @@ mod tests {
             px(16.),
             FontWeight::NORMAL,
             FontStyle::Normal,
+            None,
             cx.text_system().platform_text_system.clone(),
         )
     }
