@@ -12,6 +12,7 @@ use crate::{
     black, phi, point, quad, rems, size, solid_text_color, transparent_black, transparent_white,
 };
 use collections::HashSet;
+use ordered_float::OrderedFloat;
 use refineable::Refineable;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
@@ -497,7 +498,7 @@ impl TextStyle {
             background_color: self.background_color,
             underline: self.underline,
             strikethrough: self.strikethrough,
-            letter_spacing: None,
+            letter_spacing: self.letter_spacing.map(OrderedFloat),
         }
     }
 }
